@@ -84,6 +84,7 @@ SurfacePanel {
         border.color: root.canLaunch
                       ? HydraTheme.withAlpha(HydraTheme.accentOrangeStrong, hovered ? 0.68 : 0.42)
                       : HydraTheme.borderDark
+        clip: true
         scale: launchArea.pressed && root.canLaunch ? 0.98 : 1.0
         transformOrigin: Item.Center
         Accessible.role: Accessible.Button

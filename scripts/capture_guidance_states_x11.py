@@ -81,6 +81,8 @@ def main() -> int:
             window_id = runner.window_id()
             repo_button_name = f"Repository {REPO_NAME}"
             launch_name = "Launch tmux shell"
+            create_name = "Create worktree"
+            empty_branch_message = "Branch name is required to create a worktree."
             target_help_name = "Explain target map"
             quick_detail_name = "Open detailed help"
             detail_close_name = "Close detailed help"
@@ -90,7 +92,14 @@ def main() -> int:
             time.sleep(1.0)
 
             launch_geometry = wait_for_geometry(launch_name, runner.pid)
+            create_geometry = wait_for_geometry(create_name, runner.pid)
             target_help_geometry = wait_for_geometry(target_help_name, runner.pid)
+
+            click_at(window_id, create_geometry)
+            harness.wait_until(lambda: harness.find_by_name(empty_branch_message, runner.pid), timeout=10)
+            time.sleep(0.5)
+            capture_window(window_id, output_dir / "empty-worktree-warning.png")
+            harness.wait_until(lambda: harness.find_by_name(empty_branch_message, runner.pid) is None, timeout=8)
 
             xdotool("windowactivate", "--sync", window_id)
             xdotool(
@@ -136,12 +145,13 @@ def main() -> int:
                 subprocess.run(
                     [
                         montage,
+                        str(output_dir / "empty-worktree-warning.png"),
                         str(output_dir / "launch-hover.png"),
                         str(output_dir / "target-help-hover.png"),
                         str(output_dir / "target-help-quick.png"),
                         str(output_dir / "target-help-detail.png"),
                         "-tile",
-                        "2x2",
+                        "3x2",
                         "-geometry",
                         "+20+20",
                         "-background",
@@ -160,6 +170,7 @@ def main() -> int:
                 "db_path": str(db_path),
                 "window_id": window_id,
                 "captures": {
+                    "empty_worktree_warning": str(output_dir / "empty-worktree-warning.png"),
                     "launch_hover": str(output_dir / "launch-hover.png"),
                     "target_help_hover": str(output_dir / "target-help-hover.png"),
                     "target_help_quick": str(output_dir / "target-help-quick.png"),

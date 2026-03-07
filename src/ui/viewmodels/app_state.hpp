@@ -27,6 +27,7 @@ class AppState final : public QObject {
     Q_PROPERTY(QString selectedWorktreePath READ selectedWorktreePath WRITE setSelectedWorktreePath NOTIFY selectedWorktreePathChanged)
     Q_PROPERTY(QString selectedWorktreeBranch READ selectedWorktreeBranch NOTIFY selectedWorktreeBranchChanged)
     Q_PROPERTY(QString statusMessage READ statusMessage NOTIFY statusMessageChanged)
+    Q_PROPERTY(bool statusIsWarning READ statusIsWarning NOTIFY statusMessageChanged)
     Q_PROPERTY(QString repositoryRootPath READ repositoryRootPath NOTIFY repositoryWorkspaceChanged)
     Q_PROPERTY(QString hydraDirectoryPath READ hydraDirectoryPath NOTIFY repositoryWorkspaceChanged)
     Q_PROPERTY(QString docsDirectoryPath READ docsDirectoryPath NOTIFY repositoryWorkspaceChanged)
@@ -57,6 +58,7 @@ public:
     void setSelectedWorktreePath(const QString &selectedWorktreePath);
     QString selectedWorktreeBranch() const;
     QString statusMessage() const;
+    bool statusIsWarning() const;
     QString repositoryRootPath() const;
     QString hydraDirectoryPath() const;
     QString docsDirectoryPath() const;
@@ -89,9 +91,11 @@ signals:
 
 private:
     void clearStatusMessage();
-    void showTransientStatus(const QString &statusMessage, int durationMs = 2600);
+    void showTransientStatus(const QString &statusMessage,
+                             int durationMs = 2600,
+                             bool warning = false);
     void reloadSelectedRepoWorkspace();
-    void setStatusMessage(const QString &statusMessage);
+    void setStatusMessage(const QString &statusMessage, bool warning = false);
     void setSelectedWorktreePathInternal(const QString &selectedWorktreePath);
 
     domain::RepoRegistry &m_repoRegistry;
@@ -102,6 +106,7 @@ private:
     QString m_selectedRepoId;
     QString m_selectedWorktreePath;
     QString m_statusMessage;
+    bool m_statusIsWarning = false;
     QString m_repositoryRootPath;
     QString m_hydraDirectoryPath;
     QString m_docsDirectoryPath;

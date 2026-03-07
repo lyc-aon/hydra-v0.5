@@ -97,6 +97,7 @@ The UX-assistance refinement pass then added section-level help buttons, context
 The maintainability audit pass then removed hidden context-property coupling, split the largest shell files into smaller named components, introduced reusable shell primitives, and added a shell component map for the current Phase 1 and 2 implementation.
 A follow-on Phase 1 / 2 refactor roadmap is now active to finish the remaining help-surface cleanup, keep the shell modular, and checkpoint the repo with a first local commit before Phase 3.
 The latest follow-up refactor pass then removed the remaining native Qt attached-tooltips from the shell and replaced them with one delayed themed hover-hint system so the live UI no longer mixes two incompatible hover surfaces.
+The notification polish pass then clipped the launch sweep to its button, made action feedback transient by default, added tone-aware status-banner animation, and validated that empty-worktree warnings now appear and clear automatically.
 
 ## Phase 2: Repo Intelligence
 

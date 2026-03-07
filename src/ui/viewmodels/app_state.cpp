@@ -4,6 +4,13 @@
 
 namespace hydra::ui {
 
+namespace {
+
+constexpr int kInfoStatusDurationMs = 2600;
+constexpr int kWarningStatusDurationMs = 3600;
+
+}
+
 AppState::AppState(domain::RepoRegistry &repoRegistry,
                    domain::WorktreeManager &worktreeManager,
                    domain::SessionSupervisor &sessionSupervisor,
@@ -95,6 +102,11 @@ QString AppState::statusMessage() const
     return m_statusMessage;
 }
 
+bool AppState::statusIsWarning() const
+{
+    return m_statusIsWarning;
+}
+
 QString AppState::repositoryRootPath() const
 {
     return m_repositoryRootPath;
@@ -153,7 +165,9 @@ int AppState::worktreeCount() const
 void AppState::launchSelectedRepoSession()
 {
     if (m_selectedRepoId.isEmpty()) {
-        setStatusMessage(QStringLiteral("Select a repository before launching a session."));
+        showTransientStatus(QStringLiteral("Select a repository before launching a session."),
+                            kWarningStatusDurationMs,
+                            true);
         return;
     }
 
@@ -162,29 +176,36 @@ void AppState::launchSelectedRepoSession()
                                          : m_repositoryRootPath;
     const domain::LaunchOutcome outcome =
         m_sessionSupervisor.launchGenericShell(m_selectedRepoId, workingDirectory);
-    setStatusMessage(outcome.message);
-    reload();
+    showTransientStatus(outcome.message,
+                        outcome.ok ? kInfoStatusDurationMs : kWarningStatusDurationMs,
+                        !outcome.ok);
+    if (outcome.ok) {
+        reload();
+    }
 }
 
 bool AppState::createWorktree(const QString &branchName)
 {
     if (m_selectedRepoId.isEmpty()) {
-        setStatusMessage(QStringLiteral("Select a repository before creating a worktree."));
+        showTransientStatus(QStringLiteral("Select a repository before creating a worktree."),
+                            kWarningStatusDurationMs,
+                            true);
         return false;
     }
 
     const domain::WorktreeCreationOutcome outcome =
         m_worktreeManager.createWorktree(m_selectedRepoId, branchName);
     if (!outcome.ok) {
-        setStatusMessage(outcome.errorMessage);
-        reloadSelectedRepoWorkspace();
+        showTransientStatus(outcome.errorMessage, kWarningStatusDurationMs, true);
         return false;
     }
 
     reloadSelectedRepoWorkspace();
     setSelectedWorktreePathInternal(outcome.worktree.path);
-    setStatusMessage(QStringLiteral("Created worktree %1 for branch %2.")
-                         .arg(outcome.worktree.path, outcome.worktree.branchName));
+    showTransientStatus(QStringLiteral("Created worktree %1 for branch %2.")
+                            .arg(outcome.worktree.path, outcome.worktree.branchName),
+                        kInfoStatusDurationMs,
+                        false);
     return true;
 }
 
@@ -192,14 +213,20 @@ void AppState::terminateSession(const QString &sessionId)
 {
     const domain::SessionTerminationOutcome outcome =
         m_sessionSupervisor.terminateSession(sessionId);
-    setStatusMessage(outcome.message);
-    reload();
+    showTransientStatus(outcome.message,
+                        outcome.ok ? kInfoStatusDurationMs : kWarningStatusDurationMs,
+                        !outcome.ok);
+    if (outcome.ok) {
+        reload();
+    }
 }
 
 void AppState::refresh()
 {
     reload();
-    showTransientStatus(QStringLiteral("Hydra state refreshed from SQLite, tmux, and Git."));
+    showTransientStatus(QStringLiteral("Hydra state refreshed from SQLite, tmux, and Git."),
+                        kInfoStatusDurationMs,
+                        false);
 }
 
 void AppState::clearStatusMessage()
@@ -209,12 +236,15 @@ void AppState::clearStatusMessage()
     }
 
     m_statusMessage.clear();
+    m_statusIsWarning = false;
     emit statusMessageChanged();
 }
 
-void AppState::showTransientStatus(const QString &statusMessage, const int durationMs)
+void AppState::showTransientStatus(const QString &statusMessage,
+                                   const int durationMs,
+                                   const bool warning)
 {
-    setStatusMessage(statusMessage);
+    setStatusMessage(statusMessage, warning);
     if (!statusMessage.isEmpty()) {
         m_statusMessageTimer.start(durationMs);
     }
@@ -320,14 +350,15 @@ void AppState::reloadSelectedRepoWorkspace()
     emit worktreeCountChanged();
 }
 
-void AppState::setStatusMessage(const QString &statusMessage)
+void AppState::setStatusMessage(const QString &statusMessage, const bool warning)
 {
     m_statusMessageTimer.stop();
-    if (m_statusMessage == statusMessage) {
+    if (m_statusMessage == statusMessage && m_statusIsWarning == warning) {
         return;
     }
 
     m_statusMessage = statusMessage;
+    m_statusIsWarning = !m_statusMessage.isEmpty() && warning;
     emit statusMessageChanged();
 }
 

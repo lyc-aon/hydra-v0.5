@@ -208,6 +208,7 @@ def validate_ui(results: dict, hydra_bin: Path, root: Path) -> None:
     launch_name = "Launch tmux shell"
     refresh_name = "Refresh Hydra state"
     refresh_message = "Hydra state refreshed from SQLite, tmux, and Git."
+    empty_branch_message = "Branch name is required to create a worktree."
     end_name = f"End session {REPO_NAME} shell"
     toggle_name = "Toggle navigation rail"
     target_help_name = "Explain target map"
@@ -254,6 +255,12 @@ def validate_ui(results: dict, hydra_bin: Path, root: Path) -> None:
             geometry,
         )
         results["layout"][name] = geometry
+
+    press(find_by_name("Create worktree", runner.pid))
+    wait_until(lambda: find_by_name(empty_branch_message, runner.pid), timeout=10)
+    record_check(results, "empty worktree warning becomes visible", True, empty_branch_message)
+    wait_until(lambda: find_by_name(empty_branch_message, runner.pid) is None, timeout=8)
+    record_check(results, "empty worktree warning clears", True, empty_branch_message)
 
     press(find_by_name(target_help_name, runner.pid))
     wait_until(lambda: find_by_name(quick_help_open_name, runner.pid), timeout=10)

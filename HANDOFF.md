@@ -138,6 +138,33 @@ Research note:
 - the local Full Plate Harness Brave helper exists, but `BRAVE_API_KEY` was not configured in the current environment
 - this pass therefore used current official Qt, GNOME, and C++ guidance plus the existing local Gemini CLI review path instead
 
+### 0.6 Completed the notification polish pass
+
+This pass addressed the next visible Phase 1 / 2 shell issues after the hover-hint cleanup.
+
+Main outcomes:
+
+- clipped the launch sweep to the launch button in `qml/Hydra/components/ExecutePanel.qml`
+- made action feedback transient by default through explicit notification state in `src/ui/viewmodels/app_state.*`
+- added `statusIsWarning` so the banner styling no longer has to infer tone from message text
+- animated the status banner in `qml/Hydra/components/SessionBoard.qml` instead of relying on a hard visibility jump
+- removed an unnecessary workspace reload on failed worktree creation
+- removed unnecessary full reloads on failed launch / terminate paths
+- extended `scripts/validate_wayland_ui.py` to prove the empty-worktree warning appears and clears
+- extended `scripts/capture_guidance_states_x11.py` to capture the visible warning state for review
+
+Validation rerun after the pass:
+
+- `cmake --build build/debug --target hydra -j2`
+- `cmake --build build/debug-make -j2`
+- `./build/debug-make/hydra_core_smoke`
+- `./build/debug/hydra -platform offscreen --screenshot /tmp/hydra-notification-pass.png --quit-after-screenshot`
+- `python3 scripts/capture_ui_screenshots.py --output-dir .runtime/ui-captures/notification-pass`
+- `python3 scripts/validate_wayland_ui.py`
+- `python3 scripts/validate_divider_drag_x11.py`
+- `python3 scripts/capture_guidance_states_x11.py --output-dir .runtime/ui-captures/guidance-notification-pass`
+- `python3 scripts/review_ui_with_gemini.py .runtime/ui-captures/guidance-notification-pass/contact-sheet.png .runtime/ui-captures/notification-pass/contact-sheet.png --output docs/validation/gemini-notification-polish-review-2026-03-06.md`
+
 ### 1. Audited the phase docs against the real codebase
 
 Verified:

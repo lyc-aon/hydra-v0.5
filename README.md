@@ -36,6 +36,8 @@ Document map:
 - `docs/validation/gemini-maintainability-audit-review-2026-03-06.md`
 - `docs/validation/refactor-followup-report-2026-03-06.md`
 - `docs/validation/gemini-refactor-followup-review-2026-03-06.md`
+- `docs/validation/notification-polish-report-2026-03-06.md`
+- `docs/validation/gemini-notification-polish-review-2026-03-06.md`
 - `docs/architecture/project-definition.md`
 - `docs/architecture/system-architecture.md`
 - `docs/architecture/ui-shell-component-map.md`
@@ -79,6 +81,7 @@ Implemented and verified locally:
 - contextual hover/help layer for the current Phase 1/2 shell
 - maintainability audit pass with explicit QML property wiring, modular shell decomposition, shared process execution, and reduced file sizes
 - follow-up Phase 1/2 refactor pass with one shared delayed hover-hint system and no remaining native Qt attached tooltips in the shell
+- notification polish pass with clipped launch sweep, transient worktree warnings, and animated tone-aware status notifications
 
 Still pending:
 

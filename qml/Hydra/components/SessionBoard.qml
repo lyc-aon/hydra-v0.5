@@ -183,20 +183,45 @@ Item {
         }
 
         Rectangle {
+            id: statusBanner
+
+            readonly property bool active: root.appState.statusMessage.length > 0
+            readonly property color toneColor: root.appState.statusIsWarning
+                                              ? HydraTheme.warning
+                                              : HydraTheme.accentSteelBright
+
             Layout.fillWidth: true
-            visible: root.appState.statusMessage.length > 0
-            opacity: visible ? 1.0 : 0.0
-            implicitHeight: visible ? statusText.implicitHeight + (root.denseMode ? HydraTheme.space16 : HydraTheme.space20) : 0
+            visible: active || opacity > 0.0
+            opacity: active ? 1.0 : 0.0
+            implicitHeight: Math.round((statusText.implicitHeight
+                                        + (root.denseMode ? HydraTheme.space16 : HydraTheme.space20))
+                                       * opacity)
             radius: HydraTheme.radius6
-            color: HydraTheme.withAlpha(HydraTheme.accentSteel, 0.08)
+            color: HydraTheme.withAlpha(toneColor, root.appState.statusIsWarning ? 0.12 : 0.08)
             border.width: 1
-            border.color: HydraTheme.withAlpha(HydraTheme.accentSteelBright, 0.24)
+            border.color: HydraTheme.withAlpha(toneColor, root.appState.statusIsWarning ? 0.34 : 0.24)
             clip: true
+            scale: active ? 1.0 : 0.985
             Accessible.role: Accessible.StaticText
             Accessible.name: root.appState.statusMessage
 
             Behavior on opacity {
                 NumberAnimation { duration: HydraTheme.motionNormal }
+            }
+
+            Behavior on scale {
+                NumberAnimation {
+                    duration: HydraTheme.motionNormal
+                    easing.type: Easing.OutCubic
+                }
+            }
+
+            Rectangle {
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.top: parent.top
+                height: 2
+                color: HydraTheme.withAlpha(statusBanner.toneColor, 0.62)
             }
 
             Text {
