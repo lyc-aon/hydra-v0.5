@@ -46,7 +46,7 @@ Completed in the current pass:
 - the shell now uses one delayed, themed hover-hint system hosted by `App.qml`
 - section info dots, launch/refresh/end actions, divider resize guidance, repo/worktree cards, target-map controls, and key status chips now route hover text through the same visual system
 - the ugly native tooltip path is gone from the real-window capture flow
-- the repo is ready for its first local baseline commit after docs are finalized
+- the repo now has a first local baseline commit, and generated Python cache artifacts are ignored and removed from history going forward
 
 Still active after this pass:
 

@@ -56,6 +56,7 @@ Result:
 - there are no remaining attached `ToolTip` usages under `qml/Hydra/`
 - hover guidance now uses one consistent visual language across the shell
 - the hover hint is delayed rather than appearing immediately
+- the repo now has a local git baseline with generated Python cache artifacts ignored
 
 ## Validation
 

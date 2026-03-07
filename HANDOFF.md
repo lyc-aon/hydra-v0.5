@@ -96,6 +96,7 @@ Main outcomes:
 - routed hover text for section info dots, launch/refresh/end controls, divider resize guidance, repo/worktree cards, target-map controls, and the console status chips through that same host
 - kept click-open quick help and detailed help behavior unchanged
 - updated the guidance capture path so it waits for the delayed hover hint before capturing the real X11 window
+- created the first local git baseline commit for the repo and then removed generated Python cache artifacts into `.gitignore`
 
 Files added:
 
