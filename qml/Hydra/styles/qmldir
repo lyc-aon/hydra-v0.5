@@ -1,0 +1,2 @@
+module Hydra.Styles
+singleton HydraTheme 1.0 HydraTheme.qml

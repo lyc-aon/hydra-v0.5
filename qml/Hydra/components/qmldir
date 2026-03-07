@@ -1,0 +1,23 @@
+module Hydra.Components
+ConsoleHeader 1.0 ConsoleHeader.qml
+DetailHelpPanel 1.0 DetailHelpPanel.qml
+DividerHandle 1.0 DividerHandle.qml
+ExecutePanel 1.0 ExecutePanel.qml
+FrameCorners 1.0 FrameCorners.qml
+HelpSectionCard 1.0 HelpSectionCard.qml
+HoverHintBubble 1.0 HoverHintBubble.qml
+InfoDotButton 1.0 InfoDotButton.qml
+LaunchBusPanel 1.0 LaunchBusPanel.qml
+LaunchSidebar 1.0 LaunchSidebar.qml
+MetricTile 1.0 MetricTile.qml
+QuickHelpBubble 1.0 QuickHelpBubble.qml
+RepoCard 1.0 RepoCard.qml
+SectionHeader 1.0 SectionHeader.qml
+SessionBoard 1.0 SessionBoard.qml
+SessionCard 1.0 SessionCard.qml
+SessionsSurface 1.0 SessionsSurface.qml
+ShellBackdrop 1.0 ShellBackdrop.qml
+StatusChip 1.0 StatusChip.qml
+SurfacePanel 1.0 SurfacePanel.qml
+TargetMapPanel 1.0 TargetMapPanel.qml
+WorktreeCard 1.0 WorktreeCard.qml
