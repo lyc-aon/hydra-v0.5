@@ -37,6 +37,16 @@ struct CreateWorktreeResult {
     QString errorMessage;
 };
 
+struct RemoveWorktreeRequest {
+    QString repositoryPath;
+    QString worktreePath;
+};
+
+struct RemoveWorktreeResult {
+    bool ok = false;
+    QString errorMessage;
+};
+
 class RepoWorkspace {
 public:
     virtual ~RepoWorkspace() = default;
@@ -44,6 +54,7 @@ public:
     virtual RepoLocalStateResult ensureRepoLocalState(const QString &repositoryPath) = 0;
     virtual WorktreeListResult listWorktrees(const QString &repositoryPath) const = 0;
     virtual CreateWorktreeResult createWorktree(const CreateWorktreeRequest &request) = 0;
+    virtual RemoveWorktreeResult removeWorktree(const RemoveWorktreeRequest &request) = 0;
 };
 
 }  // namespace hydra::domain::ports

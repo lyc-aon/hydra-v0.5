@@ -19,6 +19,6 @@ enum class SessionState {
 QString sessionStateToStorage(SessionState state);
 SessionState sessionStateFromStorage(const QString &value);
 QString sessionStateDisplayName(SessionState state);
-QString sessionStateAccentColor(SessionState state);
+QString sessionStateToneKey(SessionState state);
 
 }  // namespace hydra::domain

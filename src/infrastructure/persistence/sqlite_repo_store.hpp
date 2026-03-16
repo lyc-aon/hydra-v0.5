@@ -16,6 +16,7 @@ public:
     std::optional<domain::Repository> repositoryByPath(const QString &path) const override;
     bool upsertRepository(const domain::Repository &repository,
                           QString *errorMessage = nullptr) override;
+    bool deleteRepository(const QString &repositoryId, QString *errorMessage = nullptr) override;
 
 private:
     static domain::Repository readRepositoryRow(const QSqlQuery &query);

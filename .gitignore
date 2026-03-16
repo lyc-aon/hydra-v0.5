@@ -2,6 +2,7 @@ build/
 dist/
 out/
 .runtime/
+$TMPDIR/
 .DS_Store
 *.user
 *.swp

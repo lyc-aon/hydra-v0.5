@@ -1,5 +1,4 @@
 import QtQuick 6.5
-import QtQuick.Controls 6.5
 import QtQuick.Layouts 6.5
 import "../styles"
 
@@ -9,27 +8,37 @@ Rectangle {
     property string repoId: ""
     property string repoName: ""
     property string repoPath: ""
-    property string repoDescription: ""
     property color accentColor: HydraTheme.accentBronze
     property bool selected: false
-    property QtObject hoverHost: null
+    property var hoverHost: null
     property bool compactMode: false
     property bool hovered: false
+    readonly property color effectiveAccentColor: HydraTheme.currentThemeId === "og_steam"
+                                                 ? HydraTheme.repositoryAccent
+                                                 : root.accentColor
+    readonly property color targetToneColor: HydraTheme.accentBronze
+    readonly property color removeToneColor: HydraTheme.currentThemeId === "og_steam"
+                                             ? HydraTheme.accentSignal
+                                             : HydraTheme.danger
+    readonly property int inlineTagHeight: targetTag.implicitHeight
 
     signal activated()
+    signal removeRequested(string repoId)
 
     radius: HydraTheme.radius6
-    implicitHeight: root.compactMode ? 54 : (repoDescription.length > 0 ? 78 : 62)
+    implicitHeight: root.compactMode ? 44 : 48
     color: selected
-           ? HydraTheme.withAlpha(root.accentColor, root.hovered ? 0.16 : 0.11)
+           ? HydraTheme.withAlpha(root.effectiveAccentColor, root.hovered ? 0.16 : 0.11)
            : (root.hovered
               ? HydraTheme.withAlpha(HydraTheme.railCardSelected, 0.98)
               : HydraTheme.railCard)
     border.width: 1
     border.color: selected
-                  ? HydraTheme.withAlpha(accentColor, root.hovered ? 0.72 : 0.58)
-                  : (root.hovered ? HydraTheme.borderFocus : HydraTheme.borderDark)
+                  ? HydraTheme.withAlpha(root.effectiveAccentColor,
+                                         root.activeFocus ? 0.86 : (root.hovered ? 0.72 : 0.58))
+                  : ((root.hovered || root.activeFocus) ? HydraTheme.borderFocus : HydraTheme.borderDark)
     clip: true
+    activeFocusOnTab: true
     scale: root.hovered ? 1.008 : 1.0
     Accessible.role: Accessible.Button
     Accessible.name: repoName.length > 0 ? "Repository " + repoName : "Repository"
@@ -51,8 +60,8 @@ Rectangle {
         anchors.left: parent.left
         anchors.top: parent.top
         anchors.bottom: parent.bottom
-        width: selected ? 3 : 2
-        color: selected ? root.accentColor : HydraTheme.withAlpha(root.accentColor, 0.55)
+        width: root.selected ? 3 : 2
+        color: root.selected ? root.effectiveAccentColor : HydraTheme.withAlpha(root.effectiveAccentColor, 0.55)
     }
 
     Rectangle {
@@ -60,7 +69,7 @@ Rectangle {
         anchors.right: parent.right
         anchors.top: parent.top
         height: 1
-        color: HydraTheme.withAlpha(selected ? root.accentColor : HydraTheme.accentSteel, 0.24)
+        color: HydraTheme.withAlpha(root.selected ? root.effectiveAccentColor : HydraTheme.accentSteel, 0.24)
     }
 
     Rectangle {
@@ -75,6 +84,7 @@ Rectangle {
     MouseArea {
         anchors.fill: parent
         hoverEnabled: true
+        onContainsMouseChanged: if (containsMouse) HydraSounds.playHover()
         cursorShape: Qt.PointingHandCursor
         onEntered: {
             root.hovered = true
@@ -88,58 +98,73 @@ Rectangle {
                 root.hoverHost.clearHoverHint(root)
             }
         }
-        onClicked: root.activated()
+        onClicked: { HydraSounds.playClick(); root.activated() }
+    }
+
+    Keys.onPressed: event => {
+        if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter || event.key === Qt.Key_Space) {
+            root.activated()
+            event.accepted = true
+        }
     }
 
     ColumnLayout {
         anchors.fill: parent
-        anchors.leftMargin: root.compactMode ? HydraTheme.space8 : HydraTheme.space10
-        anchors.rightMargin: root.compactMode ? HydraTheme.space8 : HydraTheme.space10
-        anchors.topMargin: root.compactMode ? HydraTheme.space8 : HydraTheme.space9
-        anchors.bottomMargin: root.compactMode ? HydraTheme.space8 : HydraTheme.space9
-        spacing: root.compactMode ? HydraTheme.space2 : HydraTheme.space4
+        anchors.leftMargin: root.compactMode ? HydraTheme.space10 : HydraTheme.space10
+        anchors.rightMargin: root.compactMode ? HydraTheme.space10 : HydraTheme.space10
+        anchors.topMargin: root.compactMode ? HydraTheme.space6 : HydraTheme.space8
+        anchors.bottomMargin: root.compactMode ? HydraTheme.space6 : HydraTheme.space8
+        spacing: HydraTheme.space4
 
         RowLayout {
             Layout.fillWidth: true
-            spacing: HydraTheme.space8
+            spacing: HydraTheme.space6
 
             Text {
                 text: root.repoName
                 color: HydraTheme.textOnDark
                 font.family: HydraTheme.displayFamily
-                font.pixelSize: root.compactMode ? 12 : 14
+                font.pixelSize: root.compactMode ? 11 : 12
                 font.bold: true
-                font.letterSpacing: 0.8
+                font.letterSpacing: 0.6
                 elide: Text.ElideRight
                 Layout.fillWidth: true
             }
 
-            Text {
+            StatusChip {
+                id: targetTag
+
                 visible: root.selected
-                text: root.compactMode ? "[TGT]" : "[TARGET]"
-                color: root.accentColor
-                font.family: HydraTheme.monoFamily
-                font.pixelSize: 8
-                font.bold: true
+                text: root.compactMode ? "TGT" : "TARGET"
+                toneColor: root.targetToneColor
+                textColor: HydraTheme.textOnDark
+                fillOpacity: 0.2
+                borderOpacity: 0.42
+                horizontalPadding: root.compactMode ? HydraTheme.space4 : HydraTheme.space5
+                verticalPadding: HydraTheme.space2
+                textPixelSize: 10
+                minWidth: root.compactMode ? 40 : 52
+            }
+
+            ActionChip {
+                id: removeButton
+                text: root.compactMode ? "[X]" : "[UNLINK]"
+                toneColor: root.removeToneColor
+                minWidth: root.compactMode ? 46 : 0
+                implicitHeight: root.inlineTagHeight
+                accessibleLabel: root.repoName.length > 0
+                                 ? "Remove repository " + root.repoName
+                                 : "Remove repository"
+                toolTipText: "Remove this repository from Hydra. Files on disk stay intact."
+                hoverHost: root.hoverHost
+                onClicked: root.removeRequested(root.repoId)
             }
         }
 
         Text {
-            visible: !root.compactMode && root.repoDescription.length > 0
-            text: root.repoDescription
-            color: HydraTheme.textOnDarkMuted
-            font.family: HydraTheme.monoFamily
-            font.pixelSize: 9
-            wrapMode: Text.WordWrap
-            maximumLineCount: 1
-            elide: Text.ElideRight
-            Layout.fillWidth: true
-        }
-
-        Text {
             text: root.repoPath
-            color: HydraTheme.accentSteelBright
-            font.pixelSize: root.compactMode ? 8 : 8
+            color: HydraTheme.textOnLightSoft
+            font.pixelSize: 10
             font.family: HydraTheme.monoFamily
             elide: Text.ElideMiddle
             Layout.fillWidth: true

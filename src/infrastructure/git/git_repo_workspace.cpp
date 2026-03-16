@@ -378,6 +378,33 @@ domain::ports::CreateWorktreeResult GitRepoWorkspace::createWorktree(
             .errorMessage = QString()};
 }
 
+domain::ports::RemoveWorktreeResult GitRepoWorkspace::removeWorktree(
+    const domain::ports::RemoveWorktreeRequest &request)
+{
+    const GitContext gitContext = resolveGitContext(request.repositoryPath);
+    if (!gitContext.ok) {
+        return {.ok = false, .errorMessage = gitContext.errorMessage};
+    }
+
+    const QString trimmedWorktreePath = request.worktreePath.trimmed();
+    if (trimmedWorktreePath.isEmpty()) {
+        return {.ok = false, .errorMessage = QStringLiteral("Worktree path is required.")};
+    }
+
+    const CommandResult removeResult = runGit(gitContext.repositoryRootPath,
+                                              {QStringLiteral("worktree"),
+                                               QStringLiteral("remove"),
+                                               QStringLiteral("--force"),
+                                               trimmedWorktreePath});
+    if (!removeResult.ok) {
+        return {.ok = false,
+                .errorMessage = QStringLiteral("git worktree remove failed: %1")
+                                    .arg(trimmedOutput(removeResult.standardError))};
+    }
+
+    return {.ok = true, .errorMessage = QString()};
+}
+
 GitRepoWorkspace::CommandResult GitRepoWorkspace::runGit(const QString &workingDirectory,
                                                          const QStringList &arguments) const
 {

@@ -7,7 +7,7 @@
 
 namespace hydra::ui {
 
-class WorktreeListModel final : public QAbstractListModel {
+class WorktreeListModel : public QAbstractListModel {
     Q_OBJECT
 
 public:

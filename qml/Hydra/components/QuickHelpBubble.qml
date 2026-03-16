@@ -117,8 +117,9 @@ Item {
 
                         anchors.fill: parent
                         hoverEnabled: true
+                        onContainsMouseChanged: if (containsMouse) HydraSounds.playHover()
                         cursorShape: Qt.PointingHandCursor
-                        onClicked: root.detailRequested(root.topicId)
+                        onClicked: { HydraSounds.playClick(); root.detailRequested(root.topicId) }
                     }
 
                     Text {
@@ -126,7 +127,7 @@ Item {
                         text: "[DETAILS]"
                         color: detailArea.containsMouse ? HydraTheme.accentPhosphor : HydraTheme.textOnDark
                         font.family: HydraTheme.monoFamily
-                        font.pixelSize: 9
+                        font.pixelSize: 10
                         font.bold: true
                     }
                 }
@@ -150,6 +151,7 @@ Item {
 
                         anchors.fill: parent
                         hoverEnabled: true
+                        onContainsMouseChanged: if (containsMouse) HydraSounds.playHover()
                         cursorShape: Qt.PointingHandCursor
                         onClicked: root.dismissRequested()
                     }
@@ -159,7 +161,7 @@ Item {
                         text: "[DISMISS]"
                         color: dismissArea.containsMouse ? HydraTheme.accentBronze : HydraTheme.textOnDarkMuted
                         font.family: HydraTheme.monoFamily
-                        font.pixelSize: 9
+                        font.pixelSize: 10
                         font.bold: true
                     }
                 }

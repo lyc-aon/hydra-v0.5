@@ -1,0 +1,180 @@
+import QtQuick.tooling 1.2
+
+Module {
+    Component {
+        name: "QMLTermSession"
+        accessSemantics: "reference"
+        prototype: "QObject"
+        exports: ["QMLTermWidget/QMLTermSession 2.0"]
+        Property {
+            name: "historySize"
+            type: "int"
+            index: 0
+        }
+        Property {
+            name: "initialWorkingDirectory"
+            type: "QString"
+            index: 1
+        }
+        Property {
+            name: "shellProgram"
+            type: "QString"
+            index: 2
+        }
+        Property {
+            name: "shellProgramArgs"
+            type: "QStringList"
+            index: 3
+        }
+        Property {
+            name: "hasActiveProcess"
+            type: "bool"
+            index: 4
+            isReadonly: true
+        }
+        Method {
+            name: "startShellProgram"
+        }
+    }
+    Component {
+        name: "QMLTermWidget"
+        accessSemantics: "reference"
+        prototype: "QQuickItem"
+        exports: ["QMLTermWidget/QMLTermWidget 2.0"]
+        Property {
+            name: "focus"
+            type: "bool"
+            index: 0
+        }
+        Property {
+            name: "activeFocus"
+            type: "bool"
+            index: 1
+            isReadonly: true
+        }
+        Property {
+            name: "activeFocusOnTab"
+            type: "bool"
+            index: 2
+        }
+        Property {
+            name: "session"
+            type: "QMLTermSession"
+            index: 3
+        }
+        Property {
+            name: "font"
+            type: "QFont"
+            index: 4
+        }
+        Property {
+            name: "colorScheme"
+            type: "QString"
+            index: 5
+        }
+        Property {
+            name: "enableBold"
+            type: "bool"
+            index: 6
+        }
+        Property {
+            name: "enableItalic"
+            type: "bool"
+            index: 7
+        }
+        Property {
+            name: "antialiasText"
+            type: "bool"
+            index: 8
+        }
+        Property {
+            name: "useFBORendering"
+            type: "bool"
+            index: 9
+        }
+        Property {
+            name: "hasSelection"
+            type: "bool"
+            index: 10
+            isReadonly: true
+        }
+        Property {
+            name: "selectedText"
+            type: "QString"
+            index: 11
+            isReadonly: true
+        }
+        Property {
+            name: "terminalSize"
+            type: "QSizeF"
+            index: 12
+            isReadonly: true
+        }
+        Property {
+            name: "screenLines"
+            type: "int"
+            index: 13
+            isReadonly: true
+        }
+        Property {
+            name: "screenColumns"
+            type: "int"
+            index: 14
+            isReadonly: true
+        }
+        Property {
+            name: "lines"
+            type: "int"
+            index: 15
+            isReadonly: true
+        }
+        Property {
+            name: "columns"
+            type: "int"
+            index: 16
+            isReadonly: true
+        }
+        Property {
+            name: "forceLocalMouseSelection"
+            type: "bool"
+            index: 17
+        }
+        Signal { name: "activeFocusChanged" }
+        Signal {
+            name: "copyAvailable"
+            Parameter { name: "available"; type: "bool" }
+        }
+        Signal {
+            name: "configureRequest"
+            Parameter { name: "position"; type: "QPointF" }
+        }
+        Signal {
+            name: "mouseSignal"
+            Parameter { name: "button"; type: "int" }
+            Parameter { name: "column"; type: "int" }
+            Parameter { name: "line"; type: "int" }
+            Parameter { name: "eventType"; type: "int" }
+        }
+        Signal { name: "inputKeyTyped" }
+        Method {
+            name: "copyClipboard"
+        }
+        Method {
+            name: "pasteClipboard"
+        }
+        Method {
+            name: "forceActiveFocus"
+            Parameter { name: "reason"; type: "int" }
+        }
+        Method {
+            name: "setSelectionStart"
+            Parameter { name: "row"; type: "int" }
+            Parameter { name: "column"; type: "int" }
+        }
+        Method {
+            name: "setSelectionEnd"
+            Parameter { name: "row"; type: "int" }
+            Parameter { name: "column"; type: "int" }
+        }
+    }
+}

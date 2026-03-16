@@ -17,7 +17,7 @@ Item {
     }
 
     Repeater {
-        model: Math.ceil(root.width / 160)
+        model: Math.max(0, Math.ceil(Math.max(0, root.width) / 160))
 
         Rectangle {
             required property int index
@@ -31,7 +31,7 @@ Item {
     }
 
     Repeater {
-        model: Math.ceil(root.height / 120)
+        model: Math.max(0, Math.ceil(Math.max(0, root.height) / 120))
 
         Rectangle {
             required property int index
@@ -45,7 +45,7 @@ Item {
     }
 
     Repeater {
-        model: Math.ceil(root.height / 112)
+        model: Math.max(0, Math.ceil(Math.max(0, root.height) / 112))
 
         Item {
             id: segmentRow
@@ -57,7 +57,7 @@ Item {
             height: 18
 
             Repeater {
-                model: Math.ceil(root.width / 172)
+                model: Math.max(0, Math.ceil(Math.max(0, root.width) / 172))
 
                 Rectangle {
                     required property int index
@@ -71,7 +71,7 @@ Item {
             }
 
             Repeater {
-                model: Math.ceil(root.width / 172)
+                model: Math.max(0, Math.ceil(Math.max(0, root.width) / 172))
 
                 Rectangle {
                     required property int index
@@ -83,6 +83,43 @@ Item {
                     color: HydraTheme.withAlpha(HydraTheme.accentBronze, 0.1)
                 }
             }
+        }
+    }
+
+    Rectangle {
+        id: hermesTraceBand
+
+        width: Math.max(180, root.width * 0.42)
+        height: 58
+        x: root.width * 0.34
+        y: root.height * 0.16
+        rotation: -6
+        color: HydraTheme.withAlpha(HydraTheme.accentHermes, 0.08)
+    }
+
+    Rectangle {
+        width: Math.max(120, root.width * 0.24)
+        height: 20
+        x: root.width * 0.52
+        y: root.height * 0.12
+        rotation: -4
+        color: HydraTheme.withAlpha(HydraTheme.accentBronze, 0.07)
+        opacity: 0.18
+    }
+
+    Repeater {
+        model: Math.max(0, Math.ceil(Math.max(0, root.width) / 220))
+
+        Rectangle {
+            required property int index
+
+            x: index * 220 + 48
+            y: (index % 2 === 0 ? root.height * 0.2 : root.height * 0.72)
+            width: 3
+            height: 3
+            radius: 2
+            color: HydraTheme.withAlpha(index % 3 === 0 ? HydraTheme.accentHermesBright : HydraTheme.accentBronze,
+                                        0.22)
         }
     }
 

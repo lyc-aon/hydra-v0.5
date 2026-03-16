@@ -7,7 +7,7 @@
 
 namespace hydra::ui {
 
-class RepoListModel final : public QAbstractListModel {
+class RepoListModel : public QAbstractListModel {
     Q_OBJECT
 
 public:
@@ -15,7 +15,6 @@ public:
         RepoIdRole = Qt::UserRole + 1,
         NameRole,
         PathRole,
-        DescriptionRole,
         AccentColorRole,
         SelectedRole,
     };

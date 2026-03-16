@@ -1,5 +1,4 @@
 import QtQuick 6.5
-import QtQuick.Controls 6.5
 import "../styles"
 
 Rectangle {
@@ -9,7 +8,7 @@ Rectangle {
     property string briefText: ""
     property string accessibleLabel: "Show help"
     property bool hovered: false
-    property QtObject hoverHost: null
+    property var hoverHost: null
 
     signal helpRequested(string topicId, Item source)
 
@@ -46,6 +45,7 @@ Rectangle {
 
         anchors.fill: parent
         hoverEnabled: true
+        onContainsMouseChanged: if (containsMouse) HydraSounds.playHover()
         cursorShape: Qt.PointingHandCursor
         onEntered: {
             root.hovered = true
@@ -60,6 +60,7 @@ Rectangle {
             }
         }
         onClicked: {
+            HydraSounds.playClick()
             if (root.hoverHost && root.hoverHost.clearHoverHint) {
                 root.hoverHost.clearHoverHint(root)
             }

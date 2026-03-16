@@ -1,15 +1,24 @@
 pragma ComponentBehavior: Bound
 import QtQuick 6.5
 import QtQuick.Layouts 6.5
+import Hydra.Backend 1.0
 import "../styles"
 
 Item {
     id: root
 
-    required property QtObject appState
-    property QtObject helpHost: null
+    required property AppState appState
+    required property ThemeState themeState
+    property bool fullscreenActive: false
+    property var helpHost: null
     property bool denseMode: false
     property bool tightMode: false
+    signal fullscreenToggleRequested()
+
+    readonly property int horizontalInset: root.tightMode ? HydraTheme.space8 : HydraTheme.space10
+    readonly property int topInset: 0
+    readonly property int titleGap: HydraTheme.space4
+    readonly property int chipInset: root.tightMode ? HydraTheme.space4 : HydraTheme.space6
 
     function requestHelp(topicId, sourceItem) {
         if (helpHost && helpHost.openQuickHelp) {
@@ -17,90 +26,158 @@ Item {
         }
     }
 
-    implicitHeight: denseMode ? 62 : 76
+    implicitHeight: root.denseMode ? 80 : 96
 
-    InfoDotButton {
-        anchors.right: parent.right
-        anchors.top: parent.top
-        topicId: "console-overview"
-        briefText: "Hydra is currently a repo/worktree launcher and detached tmux session register."
-        accessibleLabel: "Explain console overview"
-        hoverHost: root.helpHost
-        onHelpRequested: (topicId, source) => root.requestHelp(topicId, source)
-    }
+    Item {
+        id: contentFrame
 
-    Text {
-        anchors.left: parent.left
-        anchors.top: parent.top
-        anchors.topMargin: 1
-        text: "HYDRA"
-        color: HydraTheme.withAlpha(HydraTheme.accentPhosphor, 0.1)
-        font.family: HydraTheme.displayFamily
-        font.pixelSize: root.denseMode ? 22 : 30
-        font.bold: true
-        font.letterSpacing: 2.4
-        scale: 1.01
-    }
+        anchors.fill: parent
+        anchors.leftMargin: root.horizontalInset
+        anchors.rightMargin: root.horizontalInset
+        anchors.topMargin: root.topInset
+        anchors.bottomMargin: HydraTheme.space4
 
-    Text {
-        anchors.left: parent.left
-        anchors.top: parent.top
-        text: "HYDRA"
-        color: HydraTheme.textOnDark
-        font.family: HydraTheme.displayFamily
-        font.pixelSize: root.denseMode ? 22 : 30
-        font.bold: true
-        font.letterSpacing: 2.4
-    }
+        RowLayout {
+            id: topRow
 
-    Text {
-        anchors.left: parent.left
-        anchors.top: parent.top
-        anchors.topMargin: root.denseMode ? 32 : 42
-        text: "ORCHESTRATION CONSOLE // TMUX GRID"
-        color: HydraTheme.accentSteelBright
-        font.family: HydraTheme.monoFamily
-        font.pixelSize: 9
-        font.bold: true
-        opacity: 0.8
-    }
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.top: parent.top
+            spacing: HydraTheme.space10
 
-    Row {
-        anchors.left: parent.left
-        anchors.right: parent.right
-        anchors.top: parent.top
-        anchors.topMargin: root.denseMode ? 46 : 58
-        spacing: HydraTheme.space6
+            Item {
+                id: titleStack
 
-        StatusChip {
-            width: root.tightMode ? 58 : 72
-            height: 18
-            hoverHost: root.helpHost
-            toneColor: root.appState.tmuxAvailable ? HydraTheme.accentReady : HydraTheme.danger
-            textColor: root.appState.tmuxAvailable ? HydraTheme.accentReady : HydraTheme.danger
-            fillOpacity: 0.1
-            borderOpacity: 0.35
-            text: root.appState.tmuxAvailable ? "[MUX]" : "[NO MUX]"
-            toolTipText: "MUX reports whether tmux is available for detached shell launch."
+                Layout.fillWidth: true
+                implicitWidth: titleText.implicitWidth
+                implicitHeight: titleText.implicitHeight + 1
+
+                Text {
+                    anchors.left: parent.left
+                    anchors.top: parent.top
+                    anchors.topMargin: 1
+                    text: "HYDRA"
+                    color: HydraTheme.withAlpha(HydraTheme.accentPhosphor, 0.1)
+                    font.family: HydraTheme.displayFamily
+                    font.pixelSize: 24
+                    font.bold: true
+                    font.letterSpacing: 1.8
+                    scale: 1.01
+                }
+
+                Text {
+                    id: titleText
+
+                    anchors.left: parent.left
+                    anchors.top: parent.top
+                    text: "HYDRA"
+                    color: HydraTheme.textOnDark
+                    font.family: HydraTheme.displayFamily
+                    font.pixelSize: 24
+                    font.bold: true
+                    font.letterSpacing: 1.8
+                }
+            }
+
+            RowLayout {
+                id: controlGroup
+
+                spacing: root.tightMode ? HydraTheme.space4 : HydraTheme.space6
+                Layout.alignment: Qt.AlignVCenter
+
+                ThemeCycleButton {
+                    themeState: root.themeState
+                    hoverHost: root.helpHost
+                    denseMode: root.denseMode
+                    tightMode: root.tightMode
+                    Layout.alignment: Qt.AlignVCenter
+                }
+
+                FullscreenToggleButton {
+                    activeState: root.fullscreenActive
+                    hoverHost: root.helpHost
+                    Layout.alignment: Qt.AlignVCenter
+                    Layout.rightMargin: HydraTheme.space4
+                    onTriggered: root.fullscreenToggleRequested()
+                }
+
+                InfoDotButton {
+                    topicId: "console-overview"
+                    briefText: "Hydra tracks repository targets, launch settings, and detached tmux sessions from one shell."
+                    accessibleLabel: "Explain console overview"
+                    hoverHost: root.helpHost
+                    Layout.alignment: Qt.AlignVCenter
+                    onHelpRequested: (topicId, source) => root.requestHelp(topicId, source)
+                }
+            }
         }
 
-        StatusChip {
-            minWidth: 54
-            hoverHost: root.helpHost
-            toneColor: HydraTheme.accentSteelBright
-            textColor: HydraTheme.accentSteelBright
-            text: "R:" + root.appState.repoCount
-            toolTipText: "R is the number of repositories currently registered in Hydra."
-        }
+        Column {
+            id: infoStack
 
-        StatusChip {
-            minWidth: 54
-            hoverHost: root.helpHost
-            toneColor: HydraTheme.accentBronze
-            textColor: HydraTheme.accentBronze
-            borderOpacity: 0.26
-            text: "W:" + root.appState.worktreeCount
-            toolTipText: "W is the number of linked worktrees currently loaded for the selected repository."
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.top: topRow.bottom
+            anchors.topMargin: root.titleGap
+            spacing: 0
+
+            Text {
+                text: "ORCHESTRATION CONSOLE // DETACHED SHELLS"
+                color: HydraTheme.panelRule
+                font.family: HydraTheme.monoFamily
+                font.pixelSize: 10
+                font.bold: true
+                opacity: 0.8
+            }
+
+            Item {
+                width: 1
+                height: HydraTheme.space8
+            }
+
+            RowLayout {
+                x: root.chipInset
+                width: Math.max(0, parent.width - root.chipInset)
+                spacing: HydraTheme.space8
+
+                StatusChip {
+                    Layout.preferredWidth: root.tightMode ? 64 : 82
+                    Layout.preferredHeight: implicitHeight
+                    hoverHost: root.helpHost
+                    toneColor: root.appState.tmuxAvailable ? HydraTheme.accentReady : HydraTheme.danger
+                    textColor: HydraTheme.textOnDark
+                    fillOpacity: 0.18
+                    borderOpacity: 0.4
+                    text: root.appState.tmuxAvailable ? "[TMUX]" : "[NO TMUX]"
+                    toolTipText: "TMUX reports whether detached shell launch is available."
+                }
+
+                StatusChip {
+                    Layout.preferredWidth: root.tightMode ? 54 : 74
+                    hoverHost: root.helpHost
+                    toneColor: HydraTheme.accentSteelBright
+                    textColor: HydraTheme.textOnDark
+                    fillOpacity: 0.12
+                    borderOpacity: 0.28
+                    text: root.tightMode ? "R:" + root.appState.repoCount : "REPOS " + root.appState.repoCount
+                    toolTipText: "REPOS is the number of repositories currently registered in Hydra."
+                }
+
+                StatusChip {
+                    Layout.preferredWidth: root.tightMode ? 54 : 96
+                    hoverHost: root.helpHost
+                    toneColor: HydraTheme.accentBronze
+                    textColor: HydraTheme.textOnDark
+                    fillOpacity: 0.18
+                    borderOpacity: 0.34
+                    text: root.tightMode ? "W:" + root.appState.worktreeCount : "WORKTREES " + root.appState.worktreeCount
+                    toolTipText: "WORKTREES is the number of linked worktrees currently loaded for the selected repository."
+                }
+
+                Item {
+                    Layout.fillWidth: true
+                }
+            }
         }
     }
 }

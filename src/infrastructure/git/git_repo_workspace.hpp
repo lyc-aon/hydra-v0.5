@@ -16,6 +16,8 @@ public:
     domain::ports::WorktreeListResult listWorktrees(const QString &repositoryPath) const override;
     domain::ports::CreateWorktreeResult createWorktree(
         const domain::ports::CreateWorktreeRequest &request) override;
+    domain::ports::RemoveWorktreeResult removeWorktree(
+        const domain::ports::RemoveWorktreeRequest &request) override;
 
 private:
     struct GitContext {

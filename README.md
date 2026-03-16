@@ -1,134 +1,142 @@
-# HYDRA V2
+# HYDRA v0.5
 
-Hydra V2 is the planning and build repository for a native desktop orchestration workbench for parallel agent CLIs.
+Hydra v0.5 is a prototype Linux Qt/QML desktop workbench for launching, supervising, restoring, and comparing parallel agent CLI sessions over `tmux`.
 
-Current direction:
+Prototype for the Nous Research 2026 Hackathon.
 
-- Native desktop shell in C++23 with Qt 6, Qt Quick/QML, CMake, Ninja, SQLite, and CPack.
-- `tmux` as the primary session engine on macOS and Ubuntu-class Linux.
-- Provider-native adapters for Claude Code, Codex CLI, Gemini CLI, and generic commands.
-- A terminal rendering abstraction that keeps session logic independent from any single embedded terminal backend.
+- website: https://hydragui.app
+- X/Twitter: [@lyc_aon](https://x.com/lyc_aon)
 
-This repo currently holds the preserved research document plus the expanded architecture, planning, ADR, and validation notes that drive implementation.
+## Shipped surface
 
-Document map:
+- providers: `Codex CLI`, `Gemini CLI`, `Claude Code`, `Hermes CLI`, `OpenCode`
+- views: `Workbench` for session management and `Master` for router-driven orchestration
+- router flow: master sends natural-language requests to the router, router dispatches workers asynchronously, workers report completion back to router, and router forwards reviewed summaries to master
+- persistence: SQLite for repos, sessions, shell state, resumable provider metadata, and audit paths
+- terminal: embedded `qmltermwidget` bound to the selected tmux session
+- sound: bundled WAV cues played through detached Linux audio tools so startup stays non-blocking
+- provider embedding policy: preserve native provider UI by default and only override embed-critical behavior such as alternate-screen handling, control-session isolation, and state-observability hints
 
-- `HANDOFF.md`
-- `docs/research/original-user-research-verbatim.md`
-- `docs/validation/source-validated-implementation-plan-2026-03-06.md`
-- `docs/validation/ui-observation-tooling-2026-03-06.md`
-- `docs/validation/wayland-ui-operator-guide-2026-03-06.md`
-- `docs/validation/phase-1-1.5-2-validation-report-2026-03-06.md`
-- `docs/validation/visual-review-pipeline-2026-03-06.md`
-- `docs/validation/gemini-ui-review-2026-03-06.md`
-- `docs/validation/gemini-inspiration-image-analysis-2026-03-06.md`
-- `docs/validation/gemini-hermes-steam-pass-review-2026-03-06.md`
-- `docs/validation/gemini-phase1-2-delta-review-2026-03-06.md`
-- `docs/validation/gemini-deep-visual-pass-review-2026-03-06.md`
-- `docs/validation/inspiration-palette-extraction-2026-03-06.md`
-- `docs/validation/steam-palette-extraction-2026-03-06.md`
-- `docs/validation/deep-visual-pass-report-2026-03-06.md`
-- `docs/validation/steam-palette-correction-report-2026-03-06.md`
-- `docs/validation/micro-alignment-refinement-report-2026-03-06.md`
-- `docs/validation/ux-assistance-refinement-report-2026-03-06.md`
-- `docs/validation/gemini-ux-assistance-review-2026-03-06.md`
-- `docs/validation/maintainability-audit-report-2026-03-06.md`
-- `docs/validation/gemini-maintainability-audit-review-2026-03-06.md`
-- `docs/validation/refactor-followup-report-2026-03-06.md`
-- `docs/validation/gemini-refactor-followup-review-2026-03-06.md`
-- `docs/validation/notification-polish-report-2026-03-06.md`
-- `docs/validation/gemini-notification-polish-review-2026-03-06.md`
-- `docs/architecture/project-definition.md`
-- `docs/architecture/system-architecture.md`
-- `docs/architecture/ui-shell-component-map.md`
-- `docs/architecture/provider-adapter-contract.md`
-- `docs/architecture/repo-storage-and-worktrees.md`
-- `docs/planning/repository-tree-proposal.md`
-- `docs/planning/implementation-phases.md`
-- `docs/planning/maintainability-audit-pass-2026-03-06.md`
-- `docs/planning/phase-1-2-refactor-roadmap-2026-03-06.md`
-- `docs/planning/shell-v2-rewrite-plan-2026-03-06.md`
-- `docs/planning/phase-1-2-followup-refinement-2026-03-06.md`
-- `docs/planning/ux-assistance-refinement-pass-2026-03-06.md`
-- `docs/recommendations/deep-visual-pass-2026-03-06.md`
-- `docs/planning/implementation-start-prompt.md`
-- `docs/adr/0001-qt-qml-shell.md`
-- `docs/adr/0002-tmux-session-backend.md`
-- `docs/adr/0003-terminal-surface-abstraction.md`
+Hermes support is intentionally limited but active. Launch, resume metadata, and profile-mode selection are part of the supported product surface.
+OpenCode support is launch-ready with explicit session-id resume, CLI model override, Hydra-managed safety mapping via inline config, and XDG-isolated control-session state for master/router workspaces.
 
-## Current implementation status
+## Repo shape
 
-Implemented and verified locally:
+- first-party runtime and tooling code lives in `src/` and `qml/Hydra/`, with only a small docs/scripts surface around it
+- the only checked-in vendor surface is `third_party/qmltermwidget_runtime/`
+- full `qmltermwidget` upstream source is fetched only when that runtime import needs to be regenerated
+- structural hot spots were split by responsibility:
+  - `SessionSupervisor` runtime observation, launch/resume, and lifecycle/shutdown code no longer live in one translation unit
+  - transcript/audit export and provider resume-token resolution now live outside the live launch/resume unit
+  - router/provider runtime helpers and router preset/workspace code no longer live in one `AppState` file
+  - `App.qml` now delegates shell chrome/layout to `AppShellSurface`, startup overlays to `StartupOverlayStack`, and shell shortcuts / shutdown confirmation UI to dedicated components
+- the active docs set is intentionally small and listed below
 
-- desktop Qt Quick shell builds and launches in the current Ubuntu environment
-- repo registry and bootstrap repo registration
-- generic `tmux` shell launch with SQLite persistence
-- persisted session refresh against live `tmux` state
-- Phase 1.5 shell styling pass
-- repo-local `.hydra/` provisioning
-- `.git/info/exclude` wiring for `.hydra/`
-- Git worktree listing, creation, selection, and worktree-bound launch targeting
-- initial AT-SPI accessibility naming for launch-rail and session-board controls
-- deterministic screenshot export and Gemini-based visual review of the shell
-- Shell V2 rewrite completed through responsive and motion/polish passes
-- collapsible navigation rail with validated full-pane board mode
-- divider-mounted navigation toggle with adjustable rail width and animated collapse/expand
-- Hermes / Steam visual-direction refinement pass over the Phase 1/2 shell
-- exact-sampled Steam/Hermes/NGE token retune plus a deeper instrument-panel visual pass
-- transient refresh confirmation validated through the live GUI harness
-- Steam-only palette correction pass based on exact pane extraction from `Image Inspiration/Oldschool Steam.jpg`
-- micro-alignment cleanup for small-card strip treatment and split-band label placement
-- contextual hover/help layer for the current Phase 1/2 shell
-- maintainability audit pass with explicit QML property wiring, modular shell decomposition, shared process execution, and reduced file sizes
-- follow-up Phase 1/2 refactor pass with one shared delayed hover-hint system and no remaining native Qt attached tooltips in the shell
-- notification polish pass with clipped launch sweep, transient worktree warnings, and animated tone-aware status notifications
-
-Still pending:
-
-- provider adapters
-- structured status ingestion
-- embedded terminal surface
-- command palette and keyboard-first hardening
-- audit/telemetry/permission governance features
-
-## Local build commands
-
-Core smoke:
+## Build
 
 ```bash
-cmake --preset debug-make
-cmake --build build/debug-make -j2
-./build/debug-make/hydra_core_smoke
+tools/prepare_qmltermwidget.sh
+cmake --preset debug
+cmake --build build/debug --target hydra hydra_boot_probe hydra_core_smoke hydra_provider_launch_overrides_smoke hydra_session_order_smoke hydra_terminal_clipboard_routing_smoke hydra_shutdown_resume_smoke hydra_qmllint -j8
+ctest --test-dir build/debug --output-on-failure
 ```
 
-Desktop app:
+`cmake --preset debug` now enables the safe CTest surface by default. `tools/prepare_qmltermwidget.sh` fetches `qmltermwidget` source on demand when the prepared runtime import is missing. The checked-in desktop dependency surface is the generated runtime import, not the full upstream source tree.
+
+## Launch
 
 ```bash
-cmake --preset debug
-cmake --build build/debug --target hydra -j2
 ./build/debug/hydra
 ```
 
-Visual capture and review:
+Skip the boot flow:
 
 ```bash
-python3 scripts/capture_ui_screenshots.py
-python3 scripts/review_ui_with_gemini.py
-python3 scripts/capture_guidance_states_x11.py
-python3 scripts/validate_wayland_ui.py
-python3 scripts/validate_divider_drag_x11.py
+./build/debug/hydra --skip-boot
 ```
 
-## Notes
+## How To Use
 
-- The current product value is orchestration, persistence, repo-local state, and worktree-aware launch targeting.
-- Terminal rendering remains intentionally deferred behind `TerminalSurface`.
-- Local UI observation and feature-driving is currently best done through AT-SPI on the real GNOME Wayland session; see `docs/validation/ui-observation-tooling-2026-03-06.md`.
-- Visual shell review is now done through built-in screenshot export plus headless Gemini review; see `docs/validation/visual-review-pipeline-2026-03-06.md`.
-- `scripts/capture_ui_screenshots.py` now exports deterministic wide, resized-wide, collapsed-wide, tight, narrow, and compact shell states plus a contact sheet.
-- `scripts/capture_guidance_states_x11.py` captures real X11 window images for hover tooltips, quick help, and detailed help.
-- the shell now uses a delayed themed hover-hint layer instead of native Qt attached tooltips, so guidance screenshots reflect the same visual language as the rest of the app.
-- `scripts/validate_wayland_ui.py` checks the normal shell and the compact `960x700` shell for semantic product behavior.
-- `scripts/validate_divider_drag_x11.py` validates the divider click/drag path under Xwayland with `xdotool`.
-- both GUI validators now scope AT-SPI lookups to the specific Hydra process they launched, which avoids interference from unrelated open Hydra windows.
-- the current shell component relationships are documented in `docs/architecture/ui-shell-component-map.md`.
+Workbench flow:
+
+1. Select or add a repo/worktree in the left rail.
+2. Pick a provider.
+3. Launch a worker session.
+4. Use the embedded terminal normally: scroll, select, copy, paste, and resume.
+
+Master/router flow:
+
+1. Switch to the `Master` view.
+2. Launch `Master` and `Router`.
+3. Send natural-language requests to the master.
+4. Let the router dispatch worker tasks asynchronously.
+5. Review worker reports coming back through the router into the master.
+
+More detail lives in [docs/how-to-use.md](docs/how-to-use.md).
+
+## Repo surface
+
+- active operator docs are `README.md`, `HANDOFF.md`, `docs/how-to-use.md`, `docs/architecture/system-architecture.md`, `docs/provider-embedding-plan.md`, and `docs/validation/gui-automation-script-inventory.md`
+- active helper scripts are `scripts/validate_wayland_ui.py`, `scripts/capture_ui_screenshots.py`, `scripts/ui_fixture.py`, and `scripts/hydra_router_control.py`
+- `third_party/` carries only the prepared `qmltermwidget` runtime import needed by the desktop shell
+- `Hydra.Backend` tooling metadata is generated during the build and is not checked in as hand-maintained source
+- `hydra_shutdown_resume_smoke` now uses its own isolated tmux socket namespace and does not touch the default tmux server
+
+## Safe verification
+
+```bash
+QT_QPA_PLATFORM=offscreen ./build/debug/hydra_core_smoke
+./build/debug/hydra_provider_launch_overrides_smoke
+./build/debug/hydra_session_order_smoke
+./build/debug/hydra_terminal_clipboard_routing_smoke
+./build/debug/hydra_shutdown_resume_smoke
+QT_QPA_PLATFORM=offscreen ./build/debug/hydra_boot_probe --wait-ms 4000
+QT_QPA_PLATFORM=offscreen ./build/debug/hydra_boot_probe --skip-boot --wait-ms 4000
+./build/debug/hydra --skip-boot --screenshot /tmp/hydra-launch.png --screenshot-delay-ms 2500 --quit-after-screenshot
+```
+
+`scripts/validate_wayland_ui.py` is still kept as the extended GNOME Wayland audit, but it is no longer treated as a fast default smoke gate.
+It now presses the live `End session` action on a Codex worker session, verifies Hydra stays up, confirms the session exits cleanly, and relaunches the same session before the restart checks.
+
+## Verified runtime
+
+- desktop boot reaches `startupShellReady=true` with and without the boot overlay
+- the verified launch path is free of repeating QML binding/runtime errors and idle stderr spam
+- a real desktop audit instance now idles at about `0.8%` CPU over a 5-second `pidstat` sample
+- the embedded terminal uses a non-FBO rendering path to keep the live runtime lighter under provider TUI load
+- provider matrix verified on the current build:
+  - `Codex`: master and router launch cleanly and settle `idle`
+  - `Gemini`: master and router launch cleanly and settle `idle`
+  - `Claude Code`: master settles `awaiting_approval`, router settles `idle`
+  - `Hermes`: master and router launch cleanly and settle `idle`
+- `OpenCode` launch/resume wiring is covered by `hydra_provider_launch_overrides_smoke`: launch uses the real TUI, resume uses `--session`, worker launches keep shared state, and non-worker control sessions use isolated XDG data/state/cache roots
+- provider terminal integration now follows one shared embedded policy across Codex, Gemini, Hermes, and OpenCode: tmux mouse stays disabled, Hydra owns wheel scrollback through tmux copy-mode, and Copy/Paste/Select All use the same context-menu path; OpenCode keeps one explicit native-terminal exception because its alt-screen UI otherwise breaks drag selection and wheel scrolling in the embedded pane
+- tmux text paste now preserves literal linefeeds with `paste-buffer -r`, which keeps multiline provider chat paste intact instead of rewriting it into carriage-return noise
+- `hydra_shutdown_resume_smoke` now drives real Codex, Gemini, Claude Code, and Hermes sessions through launch, provider-specific trust/ready transitions, multiple inputs, provider output, and managed close/resume paths on an isolated tmux socket
+- `hydra_shutdown_resume_smoke` treats Gemini interactive prompt validation as best-effort because the isolated Gemini control home does not reach a deterministic trust/ready footer on every machine run; the shutdown/resume assertions still remain hard-gated
+- app-exit shutdown now keeps unresolved pending resume tokens hidden from Resume until provider metadata resolves, instead of blocking the UI path or leaving dead Resume entries behind
+- deleting stored Resume entries now removes them from the live UI snapshot immediately instead of waiting on a later refresh cycle
+- OpenCode launch is verified on the real app path, not just via provider-plan smoke coverage
+
+## Current latency profile
+
+- isolated `./build/debug/hydra --skip-boot` reaches a screenshot/quit path in about `3.0s` with `0` stdout lines and `0` stderr lines
+- the same isolated real-app instance averages about `0.4%` CPU over a 5-second `pidstat` sample after boot
+- provider readiness still depends on external CLI probes in the async refresh path; on this machine the slowest current probe is `gemini --version` at about `0.88s`, followed by `opencode --version` at about `0.43s`
+- OpenCode is currently the heaviest session-launch path: native OpenCode TUI startup to prompt/footer is about `1.76s`, and Hydra's OpenCode resolver shells out to `opencode session list --format json -n 200`, which costs about `0.49s` per call
+- launch/resume/terminate/master/router actions still end by running a full async `refresh()` snapshot, so the visible delay before session cards and preview details settle is often the refresh bundle rather than tmux attach itself
+
+## Docs
+
+- [HANDOFF.md](HANDOFF.md)
+- [docs/README.md](docs/README.md)
+- [docs/how-to-use.md](docs/how-to-use.md)
+- [docs/architecture/system-architecture.md](docs/architecture/system-architecture.md)
+- [docs/provider-embedding-plan.md](docs/provider-embedding-plan.md)
+- [docs/validation/gui-automation-script-inventory.md](docs/validation/gui-automation-script-inventory.md)
+
+## Known constraints
+
+- Hydra is Linux-first and tmux-first.
+- desktop builds still depend on the prepared `qmltermwidget` runtime import under `third_party/qmltermwidget_runtime/`.
+- `tools/prepare_qmltermwidget.sh` fetches upstream `qmltermwidget` source only when that runtime import needs to be regenerated.

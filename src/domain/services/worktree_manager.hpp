@@ -31,6 +31,12 @@ struct WorktreeCreationOutcome {
     QString errorMessage;
 };
 
+struct WorktreeRemovalOutcome {
+    bool ok = false;
+    Worktree worktree;
+    QString errorMessage;
+};
+
 class WorktreeManager final {
 public:
     WorktreeManager(ports::RepoStore &repoStore, ports::RepoWorkspace &repoWorkspace);
@@ -38,6 +44,8 @@ public:
     RepoWorkspaceSnapshot loadWorkspace(const QString &repositoryId);
     WorktreeCreationOutcome createWorktree(const QString &repositoryId,
                                            const QString &branchName);
+    WorktreeRemovalOutcome removeWorktree(const QString &repositoryId,
+                                          const QString &worktreePath);
 
 private:
     std::optional<Repository> repositoryById(const QString &repositoryId) const;

@@ -1,2 +1,6 @@
-# Tests are intentionally light in the first scaffold pass.
-# Add Qt Test targets here once the session core settles.
+add_test(NAME hydra_core_smoke COMMAND hydra_core_smoke)
+add_test(NAME hydra_provider_launch_overrides_smoke COMMAND hydra_provider_launch_overrides_smoke)
+add_test(NAME hydra_session_order_smoke COMMAND hydra_session_order_smoke)
+add_test(NAME hydra_terminal_clipboard_routing_smoke COMMAND hydra_terminal_clipboard_routing_smoke)
+add_test(NAME hydra_terminal_interactive_attach_smoke COMMAND hydra_terminal_interactive_attach_smoke)
+add_test(NAME hydra_shutdown_resume_smoke COMMAND hydra_shutdown_resume_smoke)

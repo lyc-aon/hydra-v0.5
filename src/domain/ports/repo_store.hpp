@@ -17,6 +17,7 @@ public:
     virtual std::optional<domain::Repository> repositoryById(const QString &repositoryId) const = 0;
     virtual std::optional<domain::Repository> repositoryByPath(const QString &path) const = 0;
     virtual bool upsertRepository(const domain::Repository &repository, QString *errorMessage = nullptr) = 0;
+    virtual bool deleteRepository(const QString &repositoryId, QString *errorMessage = nullptr) = 0;
 };
 
 }  // namespace hydra::domain::ports

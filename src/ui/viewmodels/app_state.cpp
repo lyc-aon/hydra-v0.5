@@ -1,100 +1,191 @@
 #include "ui/viewmodels/app_state.hpp"
 
-#include <QHash>
+#include <QDebug>
+#include <QVariantMap>
+
+#include "domain/models/session_category.hpp"
+#include "domain/models/session_state.hpp"
 
 namespace hydra::ui {
-
-namespace {
-
-constexpr int kInfoStatusDurationMs = 2600;
-constexpr int kWarningStatusDurationMs = 3600;
-
-}
 
 AppState::AppState(domain::RepoRegistry &repoRegistry,
                    domain::WorktreeManager &worktreeManager,
                    domain::SessionSupervisor &sessionSupervisor,
+                   const domain::ProviderCatalog &providerCatalog,
+                   const QString &databasePath,
                    const bool tmuxAvailable,
                    QObject *parent)
     : QObject(parent),
       m_repoRegistry(repoRegistry),
       m_worktreeManager(worktreeManager),
       m_sessionSupervisor(sessionSupervisor),
+      m_providerCatalog(providerCatalog),
+      m_databasePath(databasePath),
       m_tmuxAvailable(tmuxAvailable),
-      m_repoModel(this),
-      m_sessionModel(this),
-      m_worktreeModel(this)
+      m_providerModel(),
+      m_repoModel(),
+      m_resumeModel(),
+      m_sessionModel(),
+      m_worktreeModel()
 {
-    m_statusMessageTimer.setParent(this);
+    loadPersistedSelectionState();
+
+    m_providerProbes = m_providerCatalog.placeholderProbes();
+    if (m_selectedProviderKey.trimmed().isEmpty()) {
+        m_selectedProviderKey = m_providerCatalog.firstProviderKey();
+    }
+    m_providerModel.setSelectedProviderKey(m_selectedProviderKey);
+    m_providerModel.setProviders(m_providerProbes);
+
+    m_masterState = std::make_unique<MasterState>(this, this);
+    m_routerState = std::make_unique<RouterState>(this, this);
+
+    auto connectFacet = [this](auto signal, QObject *facet) {
+        QObject::connect(this, signal, facet, [facet]() {
+            QMetaObject::invokeMethod(facet, "stateChanged", Qt::DirectConnection);
+        });
+    };
+
+    connectFacet(&AppState::launchConfigurationChanged, m_masterState.get());
+    connectFacet(&AppState::masterConfigChanged, m_masterState.get());
+    connectFacet(&AppState::masterSessionChanged, m_masterState.get());
+    connectFacet(&AppState::sessionCountChanged, m_masterState.get());
+
+    connectFacet(&AppState::launchConfigurationChanged, m_routerState.get());
+    connectFacet(&AppState::routerConfigChanged, m_routerState.get());
+    connectFacet(&AppState::routerSessionChanged, m_routerState.get());
+    connectFacet(&AppState::sessionCountChanged, m_routerState.get());
+
+    m_sessionMonitorThreadPool.setMaxThreadCount(1);
+    m_sessionMonitorThreadPool.setExpiryTimeout(-1);
+
     m_statusMessageTimer.setSingleShot(true);
     QObject::connect(&m_statusMessageTimer, &QTimer::timeout, this, [this]() {
         clearStatusMessage();
     });
+    QObject::connect(&m_refreshWatcher, &QFutureWatcher<RefreshSnapshot>::finished, this, [this]() {
+        const RefreshSnapshot snapshot = m_refreshWatcher.result();
+        setRefreshing(false);
+
+        if (snapshot.requestVersion != m_refreshContextVersion) {
+            QMetaObject::invokeMethod(this, &AppState::refresh, Qt::QueuedConnection);
+            return;
+        }
+
+        if (!snapshot.errorMessage.trimmed().isEmpty()) {
+            showWarningStatus(QStringLiteral("Hydra refresh failed: %1").arg(snapshot.errorMessage));
+            return;
+        }
+
+        applyRefreshSnapshot(snapshot);
+        if (!snapshot.workspaceSnapshot.ok && !snapshot.workspaceSnapshot.errorMessage.trimmed().isEmpty()) {
+            showWarningStatus(snapshot.workspaceSnapshot.errorMessage);
+            return;
+        }
+    });
+    QObject::connect(&m_providerProbeWatcher,
+                     &QFutureWatcher<ProviderProbeSnapshot>::finished,
+                     this,
+                     [this]() {
+                         applyProviderProbeSnapshot(m_providerProbeWatcher.result());
+                     });
+
+    m_sessionMonitorTimer.setInterval(2500);
+    QObject::connect(&m_sessionMonitorTimer, &QTimer::timeout, this, &AppState::pollSessionMonitor);
+    QObject::connect(&m_sessionMonitorWatcher,
+                     &QFutureWatcher<SessionMonitorSnapshot>::finished,
+                     this,
+                     [this]() {
+                         const SessionMonitorSnapshot snapshot = m_sessionMonitorWatcher.result();
+                         if (snapshot.requestVersion != m_refreshContextVersion) {
+                             return;
+                         }
+
+                         if (!snapshot.errorMessage.trimmed().isEmpty()) {
+                             qWarning().noquote()
+                                 << QStringLiteral("Hydra session monitor failed: %1")
+                                        .arg(snapshot.errorMessage);
+                             return;
+                         }
+
+                         applySessionMonitorSnapshot(snapshot);
+                     });
+
 }
 
-QAbstractItemModel *AppState::repoModel()
+AppState::~AppState()
+{
+    m_statusMessageTimer.stop();
+    m_sessionMonitorTimer.stop();
+    QObject::disconnect(&m_refreshWatcher, nullptr, this, nullptr);
+    QObject::disconnect(&m_providerProbeWatcher, nullptr, this, nullptr);
+    QObject::disconnect(&m_sessionMonitorWatcher, nullptr, this, nullptr);
+    if (m_refreshWatcher.isRunning()) {
+        m_refreshWatcher.waitForFinished();
+    }
+    if (m_providerProbeWatcher.isRunning()) {
+        m_providerProbeWatcher.waitForFinished();
+    }
+    if (m_sessionMonitorWatcher.isRunning()) {
+        m_sessionMonitorWatcher.waitForFinished();
+    }
+    m_sessionMonitorThreadPool.waitForDone();
+}
+
+void AppState::startLifecycle()
+{
+    if (m_lifecycleStarted) {
+        return;
+    }
+
+    m_lifecycleStarted = true;
+    const domain::SessionShutdownOutcome startupRecoveryOutcome =
+        m_sessionSupervisor.cleanupForeignOwnedSessionsForStartup();
+    if (!startupRecoveryOutcome.ok) {
+        showWarningStatus(QStringLiteral("Hydra could not fully clean up sessions left by an earlier app instance: %1")
+                              .arg(startupRecoveryOutcome.errors.join(QStringLiteral(" | "))),
+                          5200);
+    }
+    if (m_tmuxAvailable && !m_sessionMonitorTimer.isActive()) {
+        m_sessionMonitorTimer.start();
+    }
+    refreshProviderCatalogAsync(true);
+    refresh();
+}
+
+QAbstractListModel *AppState::repoModel()
 {
     return &m_repoModel;
 }
 
-QAbstractItemModel *AppState::sessionModel()
+QAbstractListModel *AppState::providerModel()
+{
+    return &m_providerModel;
+}
+
+QAbstractListModel *AppState::resumeModel()
+{
+    return &m_resumeModel;
+}
+
+QAbstractListModel *AppState::sessionModel()
 {
     return &m_sessionModel;
 }
 
-QAbstractItemModel *AppState::worktreeModel()
+QAbstractListModel *AppState::worktreeModel()
 {
     return &m_worktreeModel;
 }
 
-QString AppState::selectedRepoId() const
+MasterState *AppState::master() const
 {
-    return m_selectedRepoId;
+    return m_masterState.get();
 }
 
-void AppState::setSelectedRepoId(const QString &selectedRepoId)
+RouterState *AppState::router() const
 {
-    if (m_selectedRepoId == selectedRepoId) {
-        return;
-    }
-
-    m_selectedRepoId = selectedRepoId;
-    m_repoModel.setSelectedRepositoryId(m_selectedRepoId);
-    emit selectedRepoIdChanged();
-    emit selectedRepoNameChanged();
-    reloadSelectedRepoWorkspace();
-}
-
-QString AppState::selectedRepoName() const
-{
-    for (const domain::Repository &repository : m_repositories) {
-        if (repository.id == m_selectedRepoId) {
-            return repository.name;
-        }
-    }
-
-    return QStringLiteral("No repository selected");
-}
-
-QString AppState::selectedWorktreePath() const
-{
-    return m_selectedWorktreePath;
-}
-
-void AppState::setSelectedWorktreePath(const QString &selectedWorktreePath)
-{
-    setSelectedWorktreePathInternal(selectedWorktreePath);
-}
-
-QString AppState::selectedWorktreeBranch() const
-{
-    for (const domain::Worktree &worktree : m_worktrees) {
-        if (worktree.path == m_selectedWorktreePath) {
-            return worktree.branchName;
-        }
-    }
-
-    return QString();
+    return m_routerState.get();
 }
 
 QString AppState::statusMessage() const
@@ -107,24 +198,14 @@ bool AppState::statusIsWarning() const
     return m_statusIsWarning;
 }
 
+bool AppState::refreshing() const
+{
+    return m_refreshing;
+}
+
 QString AppState::repositoryRootPath() const
 {
     return m_repositoryRootPath;
-}
-
-QString AppState::hydraDirectoryPath() const
-{
-    return m_hydraDirectoryPath;
-}
-
-QString AppState::docsDirectoryPath() const
-{
-    return m_docsDirectoryPath;
-}
-
-QString AppState::repositoryWorkspaceMessage() const
-{
-    return m_repositoryWorkspaceMessage;
 }
 
 bool AppState::repositoryIsGit() const
@@ -132,24 +213,44 @@ bool AppState::repositoryIsGit() const
     return m_repositoryIsGit;
 }
 
-bool AppState::repoLocalStateReady() const
-{
-    return m_repoLocalStateReady;
-}
-
-bool AppState::gitExcludeReady() const
-{
-    return m_gitExcludeReady;
-}
-
 bool AppState::tmuxAvailable() const
 {
     return m_tmuxAvailable;
 }
 
+int AppState::activityPulse() const
+{
+    return m_activityPulse;
+}
+
+QString AppState::lastActivityKind() const
+{
+    return m_lastActivityKind;
+}
+
 int AppState::repoCount() const
 {
     return m_repositories.size();
+}
+
+int AppState::resumableSessionCount() const
+{
+    return m_resumeModel.rowCount();
+}
+
+int AppState::ownedLiveSessionCount() const
+{
+    return m_sessionSupervisor.ownedLiveSessionCount();
+}
+
+QString AppState::resumeSessionIdAt(const int row) const
+{
+    return m_resumeModel.sessionIdAt(row);
+}
+
+int AppState::sessionIndexOfId(const QString &sessionId) const
+{
+    return m_sessionModel.indexOfSessionId(sessionId);
 }
 
 int AppState::sessionCount() const
@@ -162,71 +263,44 @@ int AppState::worktreeCount() const
     return m_worktreeModel.rowCount();
 }
 
-void AppState::launchSelectedRepoSession()
+QStringList AppState::liveTmuxSessionNames() const
 {
-    if (m_selectedRepoId.isEmpty()) {
-        showTransientStatus(QStringLiteral("Select a repository before launching a session."),
-                            kWarningStatusDurationMs,
-                            true);
-        return;
+    QStringList names;
+    names.reserve(m_sessions.size());
+    for (const domain::SessionRecord &session : m_sessions) {
+        if (session.state == domain::SessionState::Exited) {
+            continue;
+        }
+
+        const QString tmuxSessionName = session.tmuxSessionName.trimmed();
+        if (!tmuxSessionName.isEmpty()) {
+            names.push_back(tmuxSessionName);
+        }
     }
 
-    const QString workingDirectory = !m_selectedWorktreePath.isEmpty()
-                                         ? m_selectedWorktreePath
-                                         : m_repositoryRootPath;
-    const domain::LaunchOutcome outcome =
-        m_sessionSupervisor.launchGenericShell(m_selectedRepoId, workingDirectory);
-    showTransientStatus(outcome.message,
-                        outcome.ok ? kInfoStatusDurationMs : kWarningStatusDurationMs,
-                        !outcome.ok);
-    if (outcome.ok) {
-        reload();
-    }
+    return names;
 }
 
-bool AppState::createWorktree(const QString &branchName)
+QVariantList AppState::sessionStateDistribution() const
 {
-    if (m_selectedRepoId.isEmpty()) {
-        showTransientStatus(QStringLiteral("Select a repository before creating a worktree."),
-                            kWarningStatusDurationMs,
-                            true);
-        return false;
+    QHash<QString, int> counts;
+    for (const domain::SessionRecord &session : m_sessions) {
+        if (session.state == domain::SessionState::Exited) {
+            continue;
+        }
+        const QString tone = domain::sessionStateToneKey(session.state);
+        counts[tone] = counts.value(tone, 0) + 1;
     }
 
-    const domain::WorktreeCreationOutcome outcome =
-        m_worktreeManager.createWorktree(m_selectedRepoId, branchName);
-    if (!outcome.ok) {
-        showTransientStatus(outcome.errorMessage, kWarningStatusDurationMs, true);
-        return false;
+    QVariantList result;
+    result.reserve(counts.size());
+    for (auto it = counts.cbegin(); it != counts.cend(); ++it) {
+        QVariantMap entry;
+        entry.insert(QStringLiteral("tone"), it.key());
+        entry.insert(QStringLiteral("count"), it.value());
+        result.push_back(entry);
     }
-
-    reloadSelectedRepoWorkspace();
-    setSelectedWorktreePathInternal(outcome.worktree.path);
-    showTransientStatus(QStringLiteral("Created worktree %1 for branch %2.")
-                            .arg(outcome.worktree.path, outcome.worktree.branchName),
-                        kInfoStatusDurationMs,
-                        false);
-    return true;
-}
-
-void AppState::terminateSession(const QString &sessionId)
-{
-    const domain::SessionTerminationOutcome outcome =
-        m_sessionSupervisor.terminateSession(sessionId);
-    showTransientStatus(outcome.message,
-                        outcome.ok ? kInfoStatusDurationMs : kWarningStatusDurationMs,
-                        !outcome.ok);
-    if (outcome.ok) {
-        reload();
-    }
-}
-
-void AppState::refresh()
-{
-    reload();
-    showTransientStatus(QStringLiteral("Hydra state refreshed from SQLite, tmux, and Git."),
-                        kInfoStatusDurationMs,
-                        false);
+    return result;
 }
 
 void AppState::clearStatusMessage()
@@ -240,6 +314,16 @@ void AppState::clearStatusMessage()
     emit statusMessageChanged();
 }
 
+void AppState::showInfoStatus(const QString &statusMessage, const int durationMs)
+{
+    showTransientStatus(statusMessage, durationMs, false);
+}
+
+void AppState::showWarningStatus(const QString &statusMessage, const int durationMs)
+{
+    showTransientStatus(statusMessage, durationMs, true);
+}
+
 void AppState::showTransientStatus(const QString &statusMessage,
                                    const int durationMs,
                                    const bool warning)
@@ -250,104 +334,32 @@ void AppState::showTransientStatus(const QString &statusMessage,
     }
 }
 
-void AppState::reload()
+const domain::Repository *AppState::findRepository(const QString &repositoryId) const
 {
-    const QString previousSelection = m_selectedRepoId;
-    m_repositories = m_repoRegistry.repositories();
-    m_repoModel.setRepositories(m_repositories);
-
-    bool selectionStillExists = false;
     for (const domain::Repository &repository : m_repositories) {
-        if (repository.id == previousSelection) {
-            selectionStillExists = true;
-            break;
+        if (repository.id == repositoryId) {
+            return &repository;
         }
     }
 
-    if (!selectionStillExists) {
-        m_selectedRepoId = m_repositories.isEmpty() ? QString() : m_repositories.first().id;
-        emit selectedRepoIdChanged();
-        emit selectedRepoNameChanged();
-    }
-
-    m_repoModel.setSelectedRepositoryId(m_selectedRepoId);
-    reloadSelectedRepoWorkspace();
-
-    QHash<QString, domain::Repository> repositoriesById;
-    for (const domain::Repository &repository : m_repositories) {
-        repositoriesById.insert(repository.id, repository);
-    }
-
-    m_sessionModel.setSessions(m_sessionSupervisor.refreshSessionStates(), repositoriesById);
-
-    emit repoCountChanged();
-    emit sessionCountChanged();
+    return nullptr;
 }
 
-void AppState::reloadSelectedRepoWorkspace()
+void AppState::recordActivity(const QString &kind)
 {
-    QString nextRepositoryRootPath;
-    QString nextHydraDirectoryPath;
-    QString nextDocsDirectoryPath;
-    QString nextRepositoryWorkspaceMessage;
-    bool nextRepositoryIsGit = false;
-    bool nextRepoLocalStateReady = false;
-    bool nextGitExcludeReady = false;
-    QVector<domain::Worktree> nextWorktrees;
+    ++m_activityPulse;
+    m_lastActivityKind = kind;
+    emit activityPulseChanged();
+}
 
-    if (!m_selectedRepoId.isEmpty()) {
-        const domain::RepoWorkspaceSnapshot snapshot =
-            m_worktreeManager.loadWorkspace(m_selectedRepoId);
-        nextRepositoryRootPath = snapshot.repositoryPath;
-        nextHydraDirectoryPath = snapshot.hydraDirectoryPath;
-        nextDocsDirectoryPath = snapshot.docsDirectoryPath;
-        nextRepositoryIsGit = snapshot.gitRepository;
-        nextRepoLocalStateReady = snapshot.hydraDirectoryReady;
-        nextGitExcludeReady = snapshot.gitExcludeReady;
-        nextWorktrees = snapshot.worktrees;
-
-        if (snapshot.ok) {
-            nextRepositoryWorkspaceMessage = snapshot.gitRepository
-                                                ? QStringLiteral("Repo-local state is ready. .hydra is provisioned and excluded from Git.")
-                                                : QStringLiteral("Repo-local state is ready. Git worktree features are unavailable for this path.");
-        } else {
-            nextRepositoryWorkspaceMessage = snapshot.errorMessage;
-        }
+void AppState::setRefreshing(const bool refreshing)
+{
+    if (m_refreshing == refreshing) {
+        return;
     }
 
-    m_repositoryRootPath = nextRepositoryRootPath;
-    m_hydraDirectoryPath = nextHydraDirectoryPath;
-    m_docsDirectoryPath = nextDocsDirectoryPath;
-    m_repositoryWorkspaceMessage = nextRepositoryWorkspaceMessage;
-    m_repositoryIsGit = nextRepositoryIsGit;
-    m_repoLocalStateReady = nextRepoLocalStateReady;
-    m_gitExcludeReady = nextGitExcludeReady;
-    m_worktrees = nextWorktrees;
-    m_worktreeModel.setWorktrees(m_worktrees);
-
-    QString nextSelectedWorktreePath;
-    const QString previousSelectedWorktreePath = m_selectedWorktreePath;
-    for (const domain::Worktree &worktree : m_worktrees) {
-        if (worktree.path == previousSelectedWorktreePath) {
-            nextSelectedWorktreePath = worktree.path;
-            break;
-        }
-    }
-    if (nextSelectedWorktreePath.isEmpty()) {
-        for (const domain::Worktree &worktree : m_worktrees) {
-            if (worktree.isMain) {
-                nextSelectedWorktreePath = worktree.path;
-                break;
-            }
-        }
-    }
-    if (nextSelectedWorktreePath.isEmpty()) {
-        nextSelectedWorktreePath = m_repositoryRootPath;
-    }
-
-    setSelectedWorktreePathInternal(nextSelectedWorktreePath);
-    emit repositoryWorkspaceChanged();
-    emit worktreeCountChanged();
+    m_refreshing = refreshing;
+    emit refreshingChanged();
 }
 
 void AppState::setStatusMessage(const QString &statusMessage, const bool warning)
@@ -360,19 +372,6 @@ void AppState::setStatusMessage(const QString &statusMessage, const bool warning
     m_statusMessage = statusMessage;
     m_statusIsWarning = !m_statusMessage.isEmpty() && warning;
     emit statusMessageChanged();
-}
-
-void AppState::setSelectedWorktreePathInternal(const QString &selectedWorktreePath)
-{
-    if (m_selectedWorktreePath == selectedWorktreePath) {
-        m_worktreeModel.setSelectedWorktreePath(m_selectedWorktreePath);
-        return;
-    }
-
-    m_selectedWorktreePath = selectedWorktreePath;
-    m_worktreeModel.setSelectedWorktreePath(m_selectedWorktreePath);
-    emit selectedWorktreePathChanged();
-    emit selectedWorktreeBranchChanged();
 }
 
 }  // namespace hydra::ui

@@ -83,30 +83,30 @@ QString sessionStateDisplayName(const SessionState state)
     return QStringLiteral("Error");
 }
 
-QString sessionStateAccentColor(const SessionState state)
+QString sessionStateToneKey(const SessionState state)
 {
     switch (state) {
     case SessionState::Starting:
-        return QStringLiteral("#c98d43");
+        return QStringLiteral("starting");
     case SessionState::Idle:
-        return QStringLiteral("#3f7d58");
+        return QStringLiteral("idle");
     case SessionState::Thinking:
-        return QStringLiteral("#4d7599");
+        return QStringLiteral("thinking");
     case SessionState::RunningTool:
-        return QStringLiteral("#1f5f8b");
+        return QStringLiteral("running_tool");
     case SessionState::AwaitingApproval:
-        return QStringLiteral("#b55d3d");
+        return QStringLiteral("awaiting_approval");
     case SessionState::WaitingForInput:
-        return QStringLiteral("#8f6b1e");
+        return QStringLiteral("waiting_for_input");
     case SessionState::Backgrounded:
-        return QStringLiteral("#5f646d");
+        return QStringLiteral("backgrounded");
     case SessionState::Exited:
-        return QStringLiteral("#70655f");
+        return QStringLiteral("exited");
     case SessionState::Error:
-        return QStringLiteral("#ad3f3f");
+        return QStringLiteral("error");
     }
 
-    return QStringLiteral("#ad3f3f");
+    return QStringLiteral("error");
 }
 
 }  // namespace hydra::domain

@@ -75,11 +75,18 @@ def insert_session_row(
     repo_id: str,
     name: str,
     provider_key: str,
+    provider_session_id: str = "",
     state: str,
     tmux_session_name: str,
     tmux_pane_id: str,
     working_directory: Path,
+    launch_safety_key: str = "workspace-safe",
     last_error: str = "",
+    status_detail: str = "",
+    status_provenance_key: str = "derived",
+    status_source_ref: str = "",
+    alias: str = "",
+    category_key: str = "worker",
     updated_at: str | None = None,
     created_at: str | None = None,
 ) -> str:
@@ -89,21 +96,29 @@ def insert_session_row(
 
     conn = sqlite3.connect(db_path)
     conn.execute(
-        "INSERT INTO sessions (id, repo_id, name, provider_key, state, tmux_session_name, "
-        "tmux_pane_id, working_directory, last_error, created_at, updated_at) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO sessions (id, repo_id, name, provider_key, provider_session_id, launch_safety_key, state, "
+        "tmux_session_name, tmux_pane_id, working_directory, last_error, status_detail, "
+        "status_provenance_key, status_source_ref, created_at, updated_at, alias, category_key) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         (
             session_id,
             repo_id,
             name,
             provider_key,
+            provider_session_id,
+            launch_safety_key,
             state,
             tmux_session_name,
             tmux_pane_id,
             str(working_directory),
             last_error,
+            status_detail,
+            status_provenance_key,
+            status_source_ref,
             created,
             updated,
+            alias,
+            category_key,
         ),
     )
     conn.commit()
@@ -111,11 +126,51 @@ def insert_session_row(
     return session_id
 
 
-def create_tmux_session(session_name: str, working_directory: Path) -> str:
-    subprocess.run(
-        ["tmux", "new-session", "-d", "-s", session_name, "-c", str(working_directory)],
-        check=True,
+def insert_timeline_event_row(
+    db_path: Path,
+    *,
+    session_id: str,
+    signal_kind: str,
+    state: str,
+    summary: str,
+    detail: str,
+    provenance_key: str,
+    source_ref: str = "",
+    created_at: str | None = None,
+) -> str:
+    event_id = str(uuid.uuid4())
+    created = created_at or iso_now()
+
+    conn = sqlite3.connect(db_path)
+    conn.execute(
+        "INSERT INTO session_timeline (id, session_id, signal_kind, state, summary, detail, "
+        "provenance_key, source_ref, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        (
+            event_id,
+            session_id,
+            signal_kind,
+            state,
+            summary,
+            detail,
+            provenance_key,
+            source_ref,
+            created,
+        ),
     )
+    conn.commit()
+    conn.close()
+    return event_id
+
+
+def create_tmux_session(
+    session_name: str,
+    working_directory: Path,
+    command: list[str] | None = None,
+) -> str:
+    launch = ["tmux", "new-session", "-d", "-s", session_name, "-c", str(working_directory)]
+    if command:
+        launch.extend(command)
+    subprocess.run(launch, check=True)
     pane_id = subprocess.check_output(
         ["tmux", "list-panes", "-t", session_name, "-F", "#{pane_id}"],
         text=True,

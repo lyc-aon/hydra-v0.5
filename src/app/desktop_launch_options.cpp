@@ -5,6 +5,8 @@
 #include <QGuiApplication>
 #include <QPointer>
 #include <QQuickWindow>
+#include <QScreen>
+#include <QSettings>
 #include <QTimer>
 
 #include <memory>
@@ -39,6 +41,7 @@ DesktopLaunchOptions parseDesktopLaunchOptions(const QStringList &arguments)
         }
         if (argument == QStringLiteral("--start-sidebar-collapsed")) {
             options.startSidebarCollapsed = true;
+            options.startSidebarCollapsedProvided = true;
             continue;
         }
         if (argument == QStringLiteral("--start-sidebar-width") && index + 1 < arguments.size()) {
@@ -51,6 +54,23 @@ DesktopLaunchOptions parseDesktopLaunchOptions(const QStringList &arguments)
         }
         if (argument == QStringLiteral("--open-help-topic") && index + 1 < arguments.size()) {
             options.startDetailHelpTopic = arguments.at(++index);
+            continue;
+        }
+        if (argument == QStringLiteral("--start-theme") && index + 1 < arguments.size()) {
+            options.startThemeId = arguments.at(++index);
+            continue;
+        }
+        if (argument == QStringLiteral("--open-session-trace-name") && index + 1 < arguments.size()) {
+            options.startSessionTraceName = arguments.at(++index);
+            continue;
+        }
+        if (argument == QStringLiteral("--skip-boot")) {
+            options.skipBootScreen = true;
+            continue;
+        }
+        if (argument == QStringLiteral("--start-screen") && index + 1 < arguments.size()) {
+            options.startScreen = arguments.at(++index).toInt();
+            continue;
         }
     }
 
@@ -61,6 +81,21 @@ void configureDesktopWindow(QQuickWindow *window, const DesktopLaunchOptions &op
 {
     if (window == nullptr) {
         return;
+    }
+
+    // Resolve target screen: CLI flag overrides persisted preference.
+    const QList<QScreen *> screens = QGuiApplication::screens();
+    QSettings settings;
+    int screenIndex = options.startScreen;
+    if (screenIndex < 0) {
+        screenIndex = settings.value(QStringLiteral("shell/screen"), -1).toInt();
+    }
+    if (screenIndex >= 0 && screenIndex < screens.size()) {
+        QScreen *target = screens.at(screenIndex);
+        window->setScreen(target);
+        window->setPosition(target->geometry().topLeft());
+        settings.setValue(QStringLiteral("shell/screen"), screenIndex);
+        settings.sync();
     }
 
     const int width = options.windowWidth > 0 ? options.windowWidth : window->width();
@@ -111,15 +146,17 @@ void scheduleDesktopScreenshotCapture(QQuickWindow *window,
         }
     };
 
-    QObject::connect(window,
-                     &QQuickWindow::frameSwapped,
-                     &application,
-                     [saveScreenshot]() {
-                         QTimer::singleShot(0, saveScreenshot);
-                     },
-                     Qt::SingleShotConnection);
-
-    QTimer::singleShot(options.screenshotDelayMs, &application, saveScreenshot);
+    if (options.screenshotDelayMs > 0) {
+        QTimer::singleShot(options.screenshotDelayMs, &application, saveScreenshot);
+    } else {
+        QObject::connect(window,
+                         &QQuickWindow::frameSwapped,
+                         &application,
+                         [saveScreenshot]() {
+                             QTimer::singleShot(0, saveScreenshot);
+                         },
+                         Qt::SingleShotConnection);
+    }
 }
 
 }  // namespace hydra::app

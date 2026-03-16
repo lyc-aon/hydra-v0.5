@@ -95,7 +95,7 @@ Item {
                     }
 
                     Text {
-                        text: "current shell documentation // phase 1-2"
+                        text: "current shell documentation // live build"
                         color: HydraTheme.accentSteelBright
                         font.family: HydraTheme.monoFamily
                         font.pixelSize: 10
@@ -125,8 +125,9 @@ Item {
 
                         anchors.fill: parent
                         hoverEnabled: true
+                        onContainsMouseChanged: if (containsMouse) HydraSounds.playHover()
                         cursorShape: Qt.PointingHandCursor
-                        onClicked: root.closeRequested()
+                        onClicked: { HydraSounds.playClick(); root.closeRequested() }
                     }
 
                     Text {
@@ -177,10 +178,27 @@ Item {
                     }
 
                     HelpSectionCard {
-                        title: "CURRENT LIMITS"
-                        accentColor: HydraTheme.danger
+                        visible: Boolean(root.topicData && root.topicData.hotkeys
+                                         && root.topicData.hotkeys.length > 0)
+                        title: "KEYBOARD SHORTCUTS"
+                        accentColor: HydraTheme.accentPhosphor
+                        lines: {
+                            if (!root.topicData || !root.topicData.hotkeys)
+                                return []
+                            return root.topicData.hotkeys.map(function(h) {
+                                return h.key + "  \u2014  " + h.action
+                            })
+                        }
+                    }
+
+                    HelpSectionCard {
+                        visible: Boolean(root.topicData && root.topicData.limits
+                                         && root.topicData.limits.length > 0)
+                        title: "KNOWN LIMITS"
+                        accentColor: HydraTheme.warning
                         lines: root.topicData ? root.topicData.limits : []
                     }
+
                 }
             }
         }

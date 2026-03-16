@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
 import shutil
 import subprocess
@@ -47,15 +48,20 @@ def run_hydra_capture(
     start_sidebar_width: int | None = None,
     open_quick_help_topic: str | None = None,
     open_help_topic: str | None = None,
+    start_theme: str | None = None,
+    open_session_trace_name: str | None = None,
     timeout: int = 30,
 ) -> None:
     env = os.environ.copy()
     env["QT_LINUX_ACCESSIBILITY_ALWAYS_ON"] = "1"
+    env["HYDRA_DISABLE_SOUND"] = "1"
     env["XDG_DATA_HOME"] = str(app_data)
+    env["XDG_CONFIG_HOME"] = str(app_data / "config")
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     cmd = [
         str(hydra_bin),
+        "--skip-boot",
         "-platform",
         "offscreen",
         "--screenshot",
@@ -76,6 +82,10 @@ def run_hydra_capture(
         cmd.extend(["--open-quick-help-topic", open_quick_help_topic])
     if open_help_topic:
         cmd.extend(["--open-help-topic", open_help_topic])
+    if start_theme:
+        cmd.extend(["--start-theme", start_theme])
+    if open_session_trace_name:
+        cmd.extend(["--open-session-trace-name", open_session_trace_name])
     proc = subprocess.run(
         cmd,
         env=env,
@@ -83,7 +93,7 @@ def run_hydra_capture(
         capture_output=True,
         timeout=timeout,
     )
-    if proc.returncode != 0:
+    if proc.returncode != 0 and not output_path.exists():
         raise CaptureError(
             f"Hydra capture failed for {output_path.name}: {proc.stderr.strip() or proc.stdout.strip()}"
         )
@@ -103,12 +113,14 @@ def maybe_write_contact_sheet(output_dir: Path, images: list[Path]) -> Path | No
         return None
 
     contact_sheet = output_dir / "contact-sheet.png"
+    columns = 4
+    rows = max(1, math.ceil(len(images) / columns))
     subprocess.run(
         [
             montage,
             *[str(image) for image in images],
             "-tile",
-            "3x4",
+            f"{columns}x{rows}",
             "-geometry",
             "+24+24",
             "-background",
@@ -149,6 +161,11 @@ def parse_args() -> argparse.Namespace:
         type=int,
         default=408,
         help="Optional sidebar width in pixels for the resized-rail capture set.",
+    )
+    parser.add_argument(
+        "--alternate-theme",
+        default="hermes_veil",
+        help="Named alternate theme id to capture in addition to the default.",
     )
     return parser.parse_args()
 
@@ -196,6 +213,7 @@ def main() -> int:
         baseline_compact = output_dir / "phase2-baseline-compact.png"
         baseline_collapsed_wide = output_dir / "phase2-baseline-collapsed-wide.png"
         baseline_resized_wide = output_dir / "phase2-baseline-resized-wide.png"
+        alt_baseline_wide = output_dir / "phase2-alt-baseline-wide.png"
         run_hydra_capture(args.hydra_bin, app_data, baseline_wide, width=1500, height=920)
         run_hydra_capture(args.hydra_bin, app_data, baseline_tight, width=1180, height=760)
         run_hydra_capture(args.hydra_bin, app_data, baseline_narrow, width=1040, height=720)
@@ -216,13 +234,21 @@ def main() -> int:
             height=920,
             start_sidebar_width=args.resized_rail_width,
         )
+        run_hydra_capture(
+            args.hydra_bin,
+            app_data,
+            alt_baseline_wide,
+            width=1500,
+            height=920,
+            start_theme=args.alternate_theme,
+        )
 
         pane_id = create_tmux_session(session_name, worktree_path)
         insert_session_row(
             db_path,
             repo_id=repo_id,
-            name=f"{REPO_NAME} shell",
-            provider_key="generic-shell",
+            name=f"{REPO_NAME} [Codex]",
+            provider_key="codex",
             state="idle",
             tmux_session_name=session_name,
             tmux_pane_id=pane_id,
@@ -236,6 +262,7 @@ def main() -> int:
         live_compact = output_dir / "phase2-live-compact.png"
         live_collapsed_wide = output_dir / "phase2-live-collapsed-wide.png"
         live_resized_wide = output_dir / "phase2-live-resized-wide.png"
+        alt_live_wide = output_dir / "phase2-alt-live-wide.png"
         run_hydra_capture(args.hydra_bin, app_data, live_wide, width=1500, height=920)
         run_hydra_capture(args.hydra_bin, app_data, live_tight, width=1180, height=760)
         run_hydra_capture(args.hydra_bin, app_data, live_narrow, width=1040, height=720)
@@ -256,6 +283,14 @@ def main() -> int:
             height=920,
             start_sidebar_width=args.resized_rail_width,
         )
+        run_hydra_capture(
+            args.hydra_bin,
+            app_data,
+            alt_live_wide,
+            width=1500,
+            height=920,
+            start_theme=args.alternate_theme,
+        )
 
         captures = [
             baseline_wide,
@@ -270,6 +305,8 @@ def main() -> int:
             live_narrow,
             baseline_compact,
             live_compact,
+            alt_baseline_wide,
+            alt_live_wide,
         ]
         contact_sheet = maybe_write_contact_sheet(output_dir, captures)
 
@@ -286,6 +323,8 @@ def main() -> int:
             "live_compact": str(live_compact),
             "live_collapsed_wide": str(live_collapsed_wide),
             "live_resized_wide": str(live_resized_wide),
+            "alt_baseline_wide": str(alt_baseline_wide),
+            "alt_live_wide": str(alt_live_wide),
         }
         if contact_sheet is not None:
             manifest["contact_sheet"] = str(contact_sheet)

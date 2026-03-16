@@ -30,8 +30,6 @@ QVariant RepoListModel::data(const QModelIndex &index, const int role) const
         return repository.name;
     case PathRole:
         return repository.path;
-    case DescriptionRole:
-        return repository.description;
     case AccentColorRole:
         return repository.accentColor;
     case SelectedRole:
@@ -47,7 +45,6 @@ QHash<int, QByteArray> RepoListModel::roleNames() const
         {RepoIdRole, "repoId"},
         {NameRole, "name"},
         {PathRole, "path"},
-        {DescriptionRole, "description"},
         {AccentColorRole, "accentColor"},
         {SelectedRole, "selected"},
     };

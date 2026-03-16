@@ -1,5 +1,7 @@
 #include "domain/services/worktree_manager.hpp"
 
+#include <algorithm>
+
 #include <QDir>
 #include <QFileInfo>
 
@@ -107,6 +109,66 @@ WorktreeCreationOutcome WorktreeManager::createWorktree(const QString &repositor
     }
 
     return {.ok = true, .worktree = result.worktree, .errorMessage = QString()};
+}
+
+WorktreeRemovalOutcome WorktreeManager::removeWorktree(const QString &repositoryId,
+                                                       const QString &worktreePath)
+{
+    const auto repository = repositoryById(repositoryId);
+    if (!repository.has_value()) {
+        return {.ok = false,
+                .worktree = {},
+                .errorMessage = QStringLiteral("Selected repository could not be found.")};
+    }
+
+    const QString trimmedWorktreePath = worktreePath.trimmed();
+    if (trimmedWorktreePath.isEmpty()) {
+        return {.ok = false,
+                .worktree = {},
+                .errorMessage = QStringLiteral("Worktree path is required.")};
+    }
+
+    const auto localState = m_repoWorkspace.ensureRepoLocalState(repository->path);
+    if (!localState.ok) {
+        return {.ok = false, .worktree = {}, .errorMessage = localState.errorMessage};
+    }
+    if (!localState.gitRepository) {
+        return {.ok = false,
+                .worktree = {},
+                .errorMessage = QStringLiteral("Worktree removal requires a Git repository.")};
+    }
+
+    const auto worktrees = m_repoWorkspace.listWorktrees(localState.repositoryRootPath);
+    if (!worktrees.ok) {
+        return {.ok = false, .worktree = {}, .errorMessage = worktrees.errorMessage};
+    }
+
+    auto target = std::find_if(worktrees.worktrees.cbegin(),
+                               worktrees.worktrees.cend(),
+                               [&trimmedWorktreePath](const Worktree &worktree) {
+                                   return worktree.path == trimmedWorktreePath;
+                               });
+    if (target == worktrees.worktrees.cend()) {
+        return {.ok = false,
+                .worktree = {},
+                .errorMessage = QStringLiteral("Worktree could not be found.")};
+    }
+    if (target->isMain) {
+        return {.ok = false,
+                .worktree = {},
+                .errorMessage = QStringLiteral("The main worktree cannot be removed.")};
+    }
+
+    ports::RemoveWorktreeRequest request;
+    request.repositoryPath = localState.repositoryRootPath;
+    request.worktreePath = target->path;
+
+    const auto result = m_repoWorkspace.removeWorktree(request);
+    if (!result.ok) {
+        return {.ok = false, .worktree = {}, .errorMessage = result.errorMessage};
+    }
+
+    return {.ok = true, .worktree = *target, .errorMessage = QString()};
 }
 
 std::optional<Repository> WorktreeManager::repositoryById(const QString &repositoryId) const

@@ -13,7 +13,7 @@
       "binaryDir": "${sourceDir}/build/debug",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
-        "HYDRA_BUILD_TESTS": "OFF"
+        "HYDRA_BUILD_TESTS": "ON"
       }
     },
     {
@@ -23,7 +23,7 @@
       "binaryDir": "${sourceDir}/build/debug-make",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
-        "HYDRA_BUILD_TESTS": "OFF"
+        "HYDRA_BUILD_TESTS": "ON"
       }
     },
     {

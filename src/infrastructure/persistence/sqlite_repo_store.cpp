@@ -85,6 +85,20 @@ bool SqliteRepoStore::upsertRepository(const domain::Repository &repository, QSt
     return ok;
 }
 
+bool SqliteRepoStore::deleteRepository(const QString &repositoryId, QString *errorMessage)
+{
+    QSqlQuery query(m_database);
+    query.prepare(QStringLiteral("DELETE FROM repos WHERE id = ?"));
+    query.addBindValue(repositoryId);
+
+    const bool ok = query.exec();
+    if (!ok && errorMessage != nullptr) {
+        *errorMessage = query.lastError().text();
+    }
+
+    return ok;
+}
+
 domain::Repository SqliteRepoStore::readRepositoryRow(const QSqlQuery &query)
 {
     domain::Repository repository;

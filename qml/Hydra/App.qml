@@ -1,7 +1,7 @@
 pragma ComponentBehavior: Bound
 import QtQuick 6.5
-import QtQuick.Controls 6.5
 import QtQuick.Window 6.5
+import Hydra.Backend 1.0
 import "HelpCatalog.js" as HelpCatalog
 import "components"
 import "styles"
@@ -9,17 +9,45 @@ import "styles"
 Window {
     id: root
 
-    required property QtObject appState
+    property AppState appState: null
+    property MasterState masterState: null
+    property RouterState routerState: null
+    property ShellState shellState: null
+    property TerminalSurfaceController terminalController: null
+    property TerminalSurfaceController masterTerminalController: null
+    property TerminalSurfaceController routerTerminalController: null
+    property ThemeState themeState: null
+    property DesktopDialogBridge desktopBridge: null
     property bool startupSidebarCollapsed: false
+    property bool startupSidebarCollapsedSet: false
     property int startupSidebarWidth: -1
     property string startupQuickHelpTopic: ""
     property string startupDetailHelpTopic: ""
-    property bool sidebarCollapsed: startupSidebarCollapsed
-    property real sidebarReveal: startupSidebarCollapsed ? 0.0 : 1.0
+    property string startupSessionTraceName: ""
+    property bool startupSkipBoot: false
+    property bool startupShellReady: startupSkipBoot
+    property bool startupLifecycleStarted: false
+    readonly property bool startupOverlayActive: !startupShellReady
+    readonly property bool shellShortcutsEnabled: startupShellReady
+    property string activeViewMode: shellState ? shellState.activeViewMode : "workbench"
+    property bool masterViewLoaded: false
+    property bool nousSplashActive: !startupSkipBoot
+    property bool bootScreenActive: false
+    property bool closeAfterShutdownApproval: false
+    readonly property bool initialSidebarCollapsed: startupSidebarCollapsedSet
+                                                    ? startupSidebarCollapsed
+                                                    : (shellState ? shellState.sidebarCollapsed : false)
+    readonly property int initialSidebarWidth: startupSidebarWidth > 0
+                                               ? startupSidebarWidth
+                                               : (shellState && shellState.sidebarWidth > 0
+                                                      ? shellState.sidebarWidth
+                                                      : railWidth)
+    property bool sidebarCollapsed: initialSidebarCollapsed
+    property real sidebarReveal: initialSidebarCollapsed ? 0.0 : 1.0
     property real dividerBaseWidth: 0
     property real expandedRailWidth: Math.max(minRailWidth,
                                               Math.min(maxRailWidth,
-                                                       startupSidebarWidth > 0 ? startupSidebarWidth : railWidth))
+                                                       initialSidebarWidth))
     property real storedRailWidth: expandedRailWidth
     property string quickHelpTopicId: ""
     property string detailHelpTopicId: ""
@@ -29,14 +57,16 @@ Window {
     property real quickHelpY: 0
     property real hoverHintX: 0
     property real hoverHintY: 0
+    property var sidebarProxy: shellSurface ? shellSurface.sidebarItem : null
     readonly property bool compactShell: width < 1420
     readonly property bool narrowShell: width < 1220
     readonly property bool tightShell: width < 1080
     readonly property int railWidth: tightShell ? 248 : (narrowShell ? 276 : (compactShell ? 308 : 356))
     readonly property int minRailWidth: tightShell ? 208 : (narrowShell ? 228 : (compactShell ? 256 : 288))
     readonly property int maxRailWidth: tightShell ? 300 : (narrowShell ? 344 : (compactShell ? 392 : 452))
-    readonly property int dividerWidth: tightShell ? 22 : 26
-    readonly property int shellInset: tightShell ? HydraTheme.space10 : HydraTheme.shellMargin
+    readonly property int dividerWidth: tightShell ? 16 : 18
+    readonly property int paneSeamGap: tightShell ? 4 : 6
+    readonly property int shellInset: 0
     readonly property int panelInset: tightShell ? HydraTheme.space10 : HydraTheme.space12
     readonly property int frameRadius: tightShell ? HydraTheme.radius10 : HydraTheme.radius12
     readonly property int quickHelpWidth: tightShell ? 272 : 320
@@ -44,9 +74,24 @@ Window {
     readonly property int detailHelpHeight: Math.min(640, height - (shellInset * 2) - HydraTheme.space32)
     readonly property int hoverHintWidth: tightShell ? 212 : 248
     readonly property real railVisibleWidth: Math.round(expandedRailWidth * sidebarReveal)
-    readonly property real boardLayoutWidth: shellSurface.width - dividerWidth - (sidebarCollapsed ? 0 : expandedRailWidth)
+    readonly property real dividerCenterX: railVisibleWidth + (paneSeamGap * 0.5)
+    readonly property real boardX: railVisibleWidth + paneSeamGap
+    readonly property real boardLayoutWidth: Math.max(0, width - (shellInset * 2) - boardX)
+    readonly property bool fullscreenActive: root.visibility === Window.FullScreen
     readonly property var quickHelpData: HelpCatalog.topic(quickHelpTopicId)
     readonly property var detailHelpData: HelpCatalog.topic(detailHelpTopicId)
+    readonly property var workbenchPane: shellSurface ? shellSurface.workbenchItem : null
+    readonly property var masterPane: shellSurface ? shellSurface.masterItem : null
+    readonly property bool sidebarBackendReady: Boolean(root.appState && root.themeState && root.desktopBridge)
+    readonly property bool workbenchBackendReady: Boolean(root.appState
+                                                          && root.shellState
+                                                          && root.terminalController)
+    readonly property bool masterBackendReady: Boolean(root.appState
+                                                       && root.masterState
+                                                       && root.routerState
+                                                       && root.shellState
+                                                       && root.masterTerminalController
+                                                       && root.routerTerminalController)
 
     width: 1460
     height: 920
@@ -56,12 +101,49 @@ Window {
     title: "Hydra V2"
     color: HydraTheme.shellBg
 
+    onClosing: function(close) {
+        const ownedLiveCount = root.appState ? root.appState.ownedLiveSessionCount : 0
+        if (!root.closeAfterShutdownApproval && ownedLiveCount > 0) {
+            close.accepted = false
+            closeConfirmDialogHost.openDialog()
+            HydraSounds.playWarning()
+            return
+        }
+
+        if (!root.closeAfterShutdownApproval) {
+            return
+        }
+
+        root.closeAfterShutdownApproval = false
+    }
+
     function clampRailWidth(value) {
         return Math.max(minRailWidth, Math.min(maxRailWidth, value))
     }
 
+    function applyTheme(themeId) {
+        if (!themeId || themeId.length === 0) {
+            return
+        }
+        HydraTheme.setTheme(themeId)
+    }
+
+    function setBorderlessFullscreen(enabled) {
+        const nextVisibility = enabled ? Window.FullScreen : Window.Windowed
+        if (root.visibility === nextVisibility) {
+            return
+        }
+        root.visibility = nextVisibility
+        shellState.fullscreen = enabled
+    }
+
+    function toggleBorderlessFullscreen() {
+        setBorderlessFullscreen(!fullscreenActive)
+    }
+
     function syncRailWidthBounds() {
-        const baseWidth = clampRailWidth(railWidth)
+        const preferredWidth = initialSidebarWidth > 0 ? initialSidebarWidth : railWidth
+        const baseWidth = clampRailWidth(preferredWidth)
         storedRailWidth = clampRailWidth(storedRailWidth > 0 ? storedRailWidth : baseWidth)
         if (!sidebarCollapsed) {
             expandedRailWidth = clampRailWidth(expandedRailWidth > 0 ? expandedRailWidth : baseWidth)
@@ -73,12 +155,159 @@ Window {
             expandedRailWidth = clampRailWidth(storedRailWidth > 0 ? storedRailWidth : railWidth)
             sidebarCollapsed = false
             sidebarReveal = 1.0
+            shellState.sidebarCollapsed = false
+            shellState.sidebarWidth = Math.round(clampRailWidth(expandedRailWidth))
             return
         }
 
         storedRailWidth = clampRailWidth(expandedRailWidth)
         sidebarCollapsed = true
         sidebarReveal = 0.0
+        shellState.sidebarCollapsed = true
+        shellState.sidebarWidth = Math.round(storedRailWidth)
+    }
+
+    function toggleViewMode() {
+        const nextMode = root.activeViewMode === "workbench" ? "master" : "workbench"
+        root.activeViewMode = nextMode
+    }
+
+    function finishStartupSequence() {
+        if (root.startupShellReady) {
+            return
+        }
+
+        if (startupOverlays.nousSplashItem && startupOverlays.nousSplashItem.abort) {
+            startupOverlays.nousSplashItem.abort()
+        }
+        if (startupOverlays.bootScreenItem && startupOverlays.bootScreenItem.abort) {
+            startupOverlays.bootScreenItem.abort()
+        }
+
+        root.nousSplashActive = false
+        root.bootScreenActive = false
+        root.startupShellReady = true
+    }
+
+    function skipStartupSequence() {
+        finishStartupSequence()
+    }
+
+    function ensureStartupLifecycle() {
+        if (root.startupLifecycleStarted || !root.appState) {
+            return
+        }
+
+        root.startupLifecycleStarted = true
+        Qt.callLater(function() {
+            root.appState.startLifecycle()
+        })
+    }
+
+    function focusRailPane() {
+        if (sidebarCollapsed) {
+            toggleSidebar()
+            Qt.callLater(function() {
+                if (sidebarProxy && sidebarProxy.focusPrimaryControl) {
+                    sidebarProxy.focusPrimaryControl()
+                }
+            })
+            return
+        }
+        if (sidebarProxy && sidebarProxy.focusPrimaryControl) {
+            sidebarProxy.focusPrimaryControl()
+        }
+    }
+
+    function focusSessionPane() {
+        if (root.activeViewMode === "master") {
+            if (root.masterPane) {
+                root.masterPane.focusOrbitStrip()
+            }
+        } else {
+            if (root.workbenchPane) {
+                root.workbenchPane.focusSessionBoard()
+            }
+        }
+    }
+
+    function focusTerminalPane() {
+        if (root.activeViewMode === "master") {
+            if (root.masterPane) {
+                root.masterPane.focusMasterTerminal()
+            }
+        } else {
+            if (root.workbenchPane) {
+                root.workbenchPane.focusTerminalPanel()
+            }
+        }
+    }
+
+    function focusRouterPane() {
+        if (root.activeViewMode === "master" && root.masterPane) {
+            root.masterPane.focusRouterPane()
+        }
+    }
+
+    function currentFocusZone() {
+        if (detailHelpTopicId.length > 0 || quickHelpTopicId.length > 0) {
+            return "help"
+        }
+        if (root.activeViewMode === "master") {
+            if (root.masterPane && root.masterPane.terminalSurfaceFocused) {
+                return "terminal"
+            }
+            if (root.masterPane && root.masterPane.routerPanelFocused) {
+                return "router"
+            }
+            if (root.masterPane && root.masterPane.orbitStripFocused) {
+                return "sessions"
+            }
+            if (sidebarProxy && sidebarProxy.focusWithin) {
+                return "rail"
+            }
+            return sidebarCollapsed ? "sessions" : "rail"
+        }
+        if (root.workbenchPane && root.workbenchPane.terminalPanelFocused) {
+            return "terminal"
+        }
+        if (root.workbenchPane && root.workbenchPane.sessionBoardFocused) {
+            return "sessions"
+        }
+        if (sidebarProxy && sidebarProxy.focusWithin) {
+            return "rail"
+        }
+        return sidebarCollapsed ? "sessions" : "rail"
+    }
+
+    function cycleFocusZone(reverse) {
+        const zones = root.activeViewMode === "master"
+                      ? (sidebarCollapsed
+                             ? ["sessions", "terminal", "router"]
+                             : ["rail", "sessions", "terminal", "router"])
+                      : (sidebarCollapsed ? ["sessions", "terminal"] : ["rail", "sessions", "terminal"])
+        const current = currentFocusZone()
+        let currentIndex = zones.indexOf(current)
+        if (currentIndex < 0) {
+            currentIndex = 0
+        }
+        const delta = reverse ? -1 : 1
+        const nextIndex = (currentIndex + delta + zones.length) % zones.length
+        switch (zones[nextIndex]) {
+        case "rail":
+            focusRailPane()
+            break
+        case "router":
+            focusRouterPane()
+            break
+        case "terminal":
+            focusTerminalPane()
+            break
+        case "sessions":
+        default:
+            focusSessionPane()
+            break
+        }
     }
 
     function openQuickHelp(topicId, sourceItem) {
@@ -169,8 +398,23 @@ Window {
     }
 
     Component.onCompleted: {
+        if (themeState) {
+            root.applyTheme(themeState.currentThemeId)
+        }
         syncRailWidthBounds()
         sidebarReveal = sidebarCollapsed ? 0.0 : 1.0
+        root.masterViewLoaded = root.activeViewMode === "master"
+        root.ensureStartupLifecycle()
+        if (root.startupSkipBoot) {
+            root.nousSplashActive = false
+            root.bootScreenActive = false
+            root.startupShellReady = true
+        }
+        if (shellState && shellState.fullscreen) {
+            Qt.callLater(function() {
+                root.setBorderlessFullscreen(true)
+            })
+        }
         if (startupDetailHelpTopic.length > 0) {
             Qt.callLater(function() {
                 root.openDetailHelp(startupDetailHelpTopic)
@@ -182,11 +426,96 @@ Window {
         }
     }
 
+    onActiveViewModeChanged: {
+        if (root.shellState.activeViewMode !== root.activeViewMode) {
+            root.shellState.activeViewMode = root.activeViewMode
+        }
+        if (root.activeViewMode === "master") {
+            root.masterViewLoaded = true
+        }
+        Qt.callLater(function() {
+            if (root.activeViewMode === "master") {
+                root.focusSessionPane()
+            } else {
+                root.focusSessionPane()
+            }
+        })
+    }
+
+    Component.onDestruction: {
+        if (!shellState) {
+            return
+        }
+        shellState.sidebarCollapsed = sidebarCollapsed
+        shellState.sidebarWidth = Math.round(clampRailWidth(sidebarCollapsed ? storedRailWidth : expandedRailWidth))
+        shellState.fullscreen = fullscreenActive
+    }
+
     onMinRailWidthChanged: syncRailWidthBounds()
     onMaxRailWidthChanged: syncRailWidthBounds()
 
+    Connections {
+        target: HydraSounds
+
+        function onBootRequested() {
+            if (root.desktopBridge) {
+                root.desktopBridge.playBootSound()
+            }
+        }
+
+        function onClickRequested() {
+            if (root.desktopBridge) {
+                root.desktopBridge.playClickSound()
+            }
+        }
+
+        function onHoverRequested() {
+            if (root.desktopBridge) {
+                root.desktopBridge.playHoverSound()
+            }
+        }
+
+        function onApprovalRequested() {
+            if (root.desktopBridge) {
+                root.desktopBridge.playApprovalSound()
+            }
+        }
+
+        function onCompletionRequested() {
+            if (root.desktopBridge) {
+                root.desktopBridge.playCompletionSound()
+            }
+        }
+
+        function onWarningRequested() {
+            if (root.desktopBridge) {
+                root.desktopBridge.playWarningSound()
+            }
+        }
+
+        function onSplashRequested() {
+            if (root.desktopBridge) {
+                root.desktopBridge.playSplashSound()
+            }
+        }
+
+        function onTerminalKeyRequested() {
+            if (root.desktopBridge) {
+                root.desktopBridge.playTerminalKeySound()
+            }
+        }
+    }
+
+    Connections {
+        target: root.themeState
+
+        function onCurrentThemeIdChanged() {
+            root.applyTheme(root.themeState.currentThemeId)
+        }
+    }
+
     Behavior on sidebarReveal {
-        enabled: !dividerHandle.dragActive
+        enabled: !(shellSurface && shellSurface.dividerDragActive)
         NumberAnimation {
             duration: HydraTheme.motionSlow
             easing.type: Easing.InOutCubic
@@ -213,183 +542,67 @@ Window {
         }
     }
 
-    Shortcut {
-        sequence: "Ctrl+B"
-        onActivated: root.toggleSidebar()
+    AppShortcutHub {
+        host: root
     }
 
-    Item {
+    AppShellSurface {
         id: shellSurface
 
         anchors.fill: parent
         anchors.margins: root.shellInset
-
-        Item {
-            id: railFrame
-
-            x: 0
-            y: 0
-            width: root.railVisibleWidth
-            height: parent.height
-            clip: true
-            z: 1
-
-            Rectangle {
-                anchors.fill: parent
-                radius: root.frameRadius
-                color: HydraTheme.railBg
-                border.width: 1
-                border.color: HydraTheme.borderDark
-                clip: true
-                opacity: root.sidebarReveal
-
-                Rectangle {
-                    anchors.left: parent.left
-                    anchors.right: parent.right
-                    anchors.top: parent.top
-                    height: root.tightShell ? 18 : 22
-                    color: HydraTheme.withAlpha(HydraTheme.boardPanelMuted, 0.44)
-                }
-
-                Rectangle {
-                    anchors.left: parent.left
-                    anchors.right: parent.right
-                    anchors.top: parent.top
-                    anchors.topMargin: root.tightShell ? 18 : 22
-                    height: 1
-                    color: HydraTheme.withAlpha(HydraTheme.accentBronze, 0.24)
-                }
-
-                Rectangle {
-                    anchors.left: parent.left
-                    anchors.top: parent.top
-                    anchors.bottom: parent.bottom
-                    width: 2
-                    color: HydraTheme.withAlpha(HydraTheme.accentBronze, 0.7)
-                }
-
-                FrameCorners {
-                    anchors.fill: parent
-                    lineColor: HydraTheme.withAlpha(HydraTheme.accentBronze, 0.24)
-                }
-
-                Item {
-                    id: railViewport
-
-                    anchors.fill: parent
-                    anchors.margins: root.panelInset
-                    clip: true
-
-                    Item {
-                        id: railContent
-
-                        width: Math.max(0, root.expandedRailWidth - (root.panelInset * 2))
-                        height: parent.height
-                        x: Math.round((root.sidebarReveal - 1.0) * HydraTheme.space16)
-                        opacity: Math.max(0.0, Math.min(1.0, (root.sidebarReveal - 0.08) / 0.92))
-
-                        LaunchSidebar {
-                            anchors.fill: parent
-                            appState: root.appState
-                            layoutWidth: parent.width
-                            helpHost: root
-                        }
-                    }
-                }
+        appState: root.appState
+        masterState: root.masterState
+        routerState: root.routerState
+        shellState: root.shellState
+        themeState: root.themeState
+        desktopBridge: root.desktopBridge
+        terminalController: root.terminalController
+        masterTerminalController: root.masterTerminalController
+        routerTerminalController: root.routerTerminalController
+        helpHost: root
+        startupShellReady: root.startupShellReady
+        sidebarBackendReady: root.sidebarBackendReady
+        workbenchBackendReady: root.workbenchBackendReady
+        masterBackendReady: root.masterBackendReady
+        sidebarCollapsed: root.sidebarCollapsed
+        sidebarReveal: root.sidebarReveal
+        panelInset: root.panelInset
+        expandedRailWidth: root.expandedRailWidth
+        railVisibleWidth: root.railVisibleWidth
+        dividerCenterX: root.dividerCenterX
+        boardX: root.boardX
+        dividerWidth: root.dividerWidth
+        frameRadius: root.frameRadius
+        tightShell: root.tightShell
+        fullscreenActive: root.fullscreenActive
+        masterViewLoaded: root.masterViewLoaded
+        activeViewMode: root.activeViewMode
+        startupExpandedSessionName: root.startupSessionTraceName
+        onToggleSidebarRequested: root.toggleSidebar()
+        onDividerDragStarted: {
+            root.dividerBaseWidth = root.sidebarCollapsed ? root.minRailWidth : root.expandedRailWidth
+            if (root.sidebarCollapsed) {
+                root.sidebarCollapsed = false
+                root.sidebarReveal = 1.0
+                root.expandedRailWidth = root.minRailWidth
+                root.storedRailWidth = root.minRailWidth
+                root.shellState.sidebarCollapsed = false
+                root.shellState.sidebarWidth = Math.round(root.minRailWidth)
             }
         }
-
-        Item {
-            id: dividerTrack
-
-            x: root.railVisibleWidth
-            y: 0
-            width: root.dividerWidth
-            height: parent.height
-            z: 3
-
-            Rectangle {
-                anchors.horizontalCenter: parent.horizontalCenter
-                anchors.top: parent.top
-                anchors.bottom: parent.bottom
-                width: 1
-                color: HydraTheme.withAlpha(HydraTheme.borderDark, 0.78)
-            }
-
-            DividerHandle {
-                id: dividerHandle
-
-                tightMode: root.tightShell
-                sidebarCollapsed: root.sidebarCollapsed
-                hoverHost: root
-                anchors.horizontalCenter: parent.horizontalCenter
-                anchors.top: parent.top
-                anchors.topMargin: root.panelInset + HydraTheme.space8
-                onToggleRequested: root.toggleSidebar()
-                onDragStarted: {
-                    root.dividerBaseWidth = root.sidebarCollapsed ? root.minRailWidth : root.expandedRailWidth
-                    if (root.sidebarCollapsed) {
-                        root.sidebarCollapsed = false
-                        root.sidebarReveal = 1.0
-                        root.expandedRailWidth = root.minRailWidth
-                        root.storedRailWidth = root.minRailWidth
-                    }
-                }
-                onDragMoved: deltaX => {
-                    const nextWidth = root.clampRailWidth(root.dividerBaseWidth + deltaX)
-                    root.expandedRailWidth = nextWidth
-                    root.storedRailWidth = nextWidth
-                }
-                onDragFinished: {
-                    root.dividerBaseWidth = root.expandedRailWidth
-                }
-            }
+        onDividerDragMoved: deltaX => {
+            const nextWidth = root.clampRailWidth(root.dividerBaseWidth + deltaX)
+            root.expandedRailWidth = nextWidth
+            root.storedRailWidth = nextWidth
+            root.shellState.sidebarWidth = Math.round(nextWidth)
         }
-
-        Rectangle {
-            id: boardFrame
-
-            anchors.left: dividerTrack.right
-            anchors.top: parent.top
-            anchors.right: parent.right
-            anchors.bottom: parent.bottom
-            radius: root.frameRadius
-            color: HydraTheme.boardBg
-            border.width: 1
-            border.color: HydraTheme.borderDark
-            clip: true
-            z: 1
-
-            Rectangle {
-                anchors.left: parent.left
-                anchors.right: parent.right
-                anchors.top: parent.top
-                height: root.tightShell ? 18 : 22
-                color: HydraTheme.withAlpha(HydraTheme.boardPanelMuted, 0.42)
-            }
-
-            Rectangle {
-                anchors.left: parent.left
-                anchors.right: parent.right
-                anchors.top: parent.top
-                anchors.topMargin: root.tightShell ? 18 : 22
-                height: 1
-                color: HydraTheme.withAlpha(HydraTheme.accentSteel, 0.22)
-            }
-
-            FrameCorners {
-                anchors.fill: parent
-                lineColor: HydraTheme.withAlpha(HydraTheme.accentBronze, 0.22)
-            }
-
-            SessionBoard {
-                anchors.fill: parent
-                anchors.margins: root.panelInset
-                appState: root.appState
-                layoutWidth: Math.max(0, root.boardLayoutWidth - (root.panelInset * 2))
-                helpHost: root
-            }
+        onDividerDragFinished: {
+            root.dividerBaseWidth = root.expandedRailWidth
+            root.shellState.sidebarWidth = Math.round(root.clampRailWidth(root.expandedRailWidth))
         }
+        onActivateWorkbenchRequested: root.activeViewMode = "workbench"
+        onActivateMasterRequested: root.activeViewMode = "master"
     }
 
     QuickHelpBubble {
@@ -420,5 +633,30 @@ Window {
         panelWidth: root.detailHelpWidth
         panelHeight: root.detailHelpHeight
         onCloseRequested: root.closeDetailHelp()
+    }
+
+    CloseConfirmDialog {
+        id: closeConfirmDialogHost
+        host: root
+    }
+
+    StartupOverlayStack {
+        id: startupOverlays
+        anchors.fill: parent
+        startupOverlayActive: root.startupOverlayActive
+        startupSkipBoot: root.startupSkipBoot
+        startupShellReady: root.startupShellReady
+        bootScreenActive: root.bootScreenActive
+        nousSplashActive: root.nousSplashActive
+        onSkipRequested: root.skipStartupSequence()
+        onBootDismissed: {
+            root.bootScreenActive = false
+            root.finishStartupSequence()
+        }
+        onSplashDismissed: {
+            root.nousSplashActive = false
+            root.bootScreenActive = true
+            startupOverlays.bootScreenItem.start()
+        }
     }
 }

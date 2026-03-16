@@ -19,7 +19,7 @@ Item {
         id: headerRow
 
         anchors.fill: parent
-        spacing: HydraTheme.space8
+        spacing: HydraTheme.space10
 
         Text {
             text: root.title
@@ -29,12 +29,14 @@ Item {
             font.bold: true
             font.letterSpacing: root.titleLetterSpacing
             Layout.fillWidth: true
+            Layout.alignment: Qt.AlignVCenter
         }
 
         RowLayout {
             id: accessoryHost
 
-            spacing: HydraTheme.space8
+            spacing: HydraTheme.space10
+            Layout.alignment: Qt.AlignVCenter
         }
     }
 }

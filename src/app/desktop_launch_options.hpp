@@ -15,9 +15,14 @@ struct DesktopLaunchOptions {
     int windowHeight = -1;
     bool quitAfterScreenshot = false;
     bool startSidebarCollapsed = false;
+    bool startSidebarCollapsedProvided = false;
     int startSidebarWidth = -1;
     QString startQuickHelpTopic;
     QString startDetailHelpTopic;
+    QString startThemeId;
+    QString startSessionTraceName;
+    bool skipBootScreen = false;
+    int startScreen = -1;
 };
 
 [[nodiscard]] DesktopLaunchOptions parseDesktopLaunchOptions(const QStringList &arguments);
