@@ -68,7 +68,6 @@ Automated:
 - `./build/debug/hydra_shutdown_resume_smoke`
 - `QT_QPA_PLATFORM=offscreen ./build/debug/hydra_boot_probe --skip-boot --wait-ms 4000`
 - `python3 scripts/validate_wayland_ui.py`
-- verify that repeated refreshes and resume-delete actions no longer feel blocked by repeated provider `--version` probes
 
 Human-emulated / desktop:
 
@@ -92,32 +91,3 @@ Human-emulated / desktop:
 3. Recheck real UI behavior on a separate Hydra instance.
 4. Only add back a suppression if a specific regression is reproduced and documented.
 5. Treat provider-specific interaction smokes as best-effort only when the upstream CLI prompt itself is nondeterministic in isolated control homes, and write that exception down explicitly.
-
-## Launch latency checklist
-
-Deterministic rollout for launch/preview responsiveness:
-
-1. Show provider entries immediately from static adapter metadata.
-2. Move expensive provider `--version` probes off the routine refresh path.
-3. Refresh provider probes asynchronously on lifecycle start and only occasionally afterward.
-4. After launch, resume, master launch, router launch, or terminate:
-   - update the in-memory session snapshot immediately from the supervisor result
-   - let the session card and preview surface appear from that local state first
-   - schedule the full refresh behind it instead of blocking the visible result on the refresh bundle
-5. Keep the heavy reconciliation path intact in the background:
-   - provider probe refresh
-   - workspace reload
-   - session-state refresh
-   - resume-token discovery
-   - timeline reload
-6. Do not touch terminal interaction behavior while hardening launch latency.
-
-Manual verification after a rebuild:
-
-- provider selector appears immediately on app boot, even before real availability probes settle
-- launching a worker adds the session card immediately instead of waiting for the next full refresh
-- launching master/router adds the control session immediately instead of waiting for the next full refresh
-- resuming a session shows the resumed card immediately
-- terminating a live session removes it from the live surface immediately and moves it to Resume
-- provider availability badges/status still settle correctly after the async probe pass
-- no terminal interaction regressions were introduced while improving launch latency

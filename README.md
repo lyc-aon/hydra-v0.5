@@ -76,7 +76,7 @@ More detail lives in [docs/how-to-use.md](docs/how-to-use.md).
 
 ## Repo surface
 
-- active operator docs are `README.md`, `HANDOFF.md`, `docs/how-to-use.md`, `docs/architecture/system-architecture.md`, `docs/provider-embedding-plan.md`, and `docs/validation/gui-automation-script-inventory.md`
+- active docs are `README.md`, `HANDOFF.md`, `docs/how-to-use.md`, `docs/architecture/system-architecture.md`, `docs/provider-embedding-plan.md`, and `docs/validation/gui-automation-script-inventory.md`
 - active helper scripts are `scripts/validate_wayland_ui.py`, `scripts/capture_ui_screenshots.py`, `scripts/ui_fixture.py`, and `scripts/hydra_router_control.py`
 - `third_party/` carries only the prepared `qmltermwidget` runtime import needed by the desktop shell
 - `Hydra.Backend` tooling metadata is generated during the build and is not checked in as hand-maintained source
@@ -95,8 +95,7 @@ QT_QPA_PLATFORM=offscreen ./build/debug/hydra_boot_probe --skip-boot --wait-ms 4
 ./build/debug/hydra --skip-boot --screenshot /tmp/hydra-launch.png --screenshot-delay-ms 2500 --quit-after-screenshot
 ```
 
-`scripts/validate_wayland_ui.py` is still kept as the extended GNOME Wayland audit, but it is no longer treated as a fast default smoke gate.
-It now presses the live `End session` action on a Codex worker session, verifies Hydra stays up, confirms the session exits cleanly, and relaunches the same session before the restart checks.
+`scripts/validate_wayland_ui.py` remains the extended GNOME Wayland audit rather than part of the fast default smoke gate.
 
 ## Verified runtime
 
@@ -113,18 +112,10 @@ It now presses the live `End session` action on a Codex worker session, verifies
 - provider terminal integration now follows one shared embedded policy across Codex, Gemini, Hermes, and OpenCode: tmux mouse stays disabled, Hydra owns wheel scrollback through tmux copy-mode, and Copy/Paste/Select All use the same context-menu path; OpenCode keeps one explicit native-terminal exception because its alt-screen UI otherwise breaks drag selection and wheel scrolling in the embedded pane
 - tmux text paste now preserves literal linefeeds with `paste-buffer -r`, which keeps multiline provider chat paste intact instead of rewriting it into carriage-return noise
 - `hydra_shutdown_resume_smoke` now drives real Codex, Gemini, Claude Code, and Hermes sessions through launch, provider-specific trust/ready transitions, multiple inputs, provider output, and managed close/resume paths on an isolated tmux socket
-- `hydra_shutdown_resume_smoke` treats Gemini interactive prompt validation as best-effort because the isolated Gemini control home does not reach a deterministic trust/ready footer on every machine run; the shutdown/resume assertions still remain hard-gated
+- `hydra_shutdown_resume_smoke` treats Gemini interactive prompt validation as best-effort because the isolated Gemini control home does not always reach a deterministic trust/ready footer; the shutdown/resume assertions remain hard-gated
 - app-exit shutdown now keeps unresolved pending resume tokens hidden from Resume until provider metadata resolves, instead of blocking the UI path or leaving dead Resume entries behind
 - deleting stored Resume entries now removes them from the live UI snapshot immediately instead of waiting on a later refresh cycle
 - OpenCode launch is verified on the real app path, not just via provider-plan smoke coverage
-
-## Current latency profile
-
-- isolated `./build/debug/hydra --skip-boot` reaches a screenshot/quit path in about `3.0s` with `0` stdout lines and `0` stderr lines
-- the same isolated real-app instance averages about `0.4%` CPU over a 5-second `pidstat` sample after boot
-- provider readiness still depends on external CLI probes in the async refresh path; on this machine the slowest current probe is `gemini --version` at about `0.88s`, followed by `opencode --version` at about `0.43s`
-- OpenCode is currently the heaviest session-launch path: native OpenCode TUI startup to prompt/footer is about `1.76s`, and Hydra's OpenCode resolver shells out to `opencode session list --format json -n 200`, which costs about `0.49s` per call
-- launch/resume/terminate/master/router actions still end by running a full async `refresh()` snapshot, so the visible delay before session cards and preview details settle is often the refresh bundle rather than tmux attach itself
 
 ## Docs
 

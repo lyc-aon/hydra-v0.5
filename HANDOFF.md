@@ -38,9 +38,8 @@ Current shipped surface:
 - Codex and Gemini no longer suppress extra native TUI chrome just for aesthetics; Codex still keeps `--no-alt-screen`, and Gemini still keeps `useAlternateBuffer=false`, because those are the embed-critical pieces
 - master/router control launches no longer silently fall back to `$HOME` if workspace staging fails
 - idle ambient animation churn was removed from the live shell chrome; a real desktop audit instance now idles at about `0.8%` CPU with zero stderr lines over a 5-second sample
-- provider executable probes are cached for 10 seconds, which cuts repeated refresh/launch/delete latency without changing the actual launch plan or provider state model
 - `validate_wayland_ui.py` now writes Hydra stdout/stderr to temp log files instead of piping them unsafely
-- `hydra_shutdown_resume_smoke` now exercises real Codex, Gemini, Claude Code, and Hermes sessions through provider-specific trust/ready flow, multiple inputs, observed output, and managed close/resume on an isolated tmux socket; Gemini interactive prompt verification is best-effort when the isolated prompt never stabilizes into a deterministic trust/ready footer
+- `hydra_shutdown_resume_smoke` now exercises real Codex, Gemini, Claude Code, and Hermes sessions through provider-specific trust/ready flow, multiple inputs, observed output, and managed close/resume on an isolated tmux socket; Gemini interactive prompt verification is best-effort when the isolated prompt does not settle into a deterministic trust/ready footer
 - shutdown/terminate no longer block on polling sleeps while waiting for provider resume metadata; pending resume tokens stay hidden until refresh resolves them
 - App shutdown is no longer doing a second synchronous owned-session teardown from `App.qml`'s close path; the app-level shutdown hooks own that cleanup so window close does not block the UI thread
 - structural boundaries are cleaner now:
@@ -48,45 +47,6 @@ Current shipped surface:
   - `SessionSupervisor` transcript/audit export and resume-token resolution helpers live outside the live launch/resume unit
   - router/provider runtime helpers, router preset text, and router preset/workspace state no longer live in one file
   - `App.qml` coordinates state while `AppShellSurface.qml`, `StartupOverlayStack.qml`, `AppShortcutHub.qml`, and `CloseConfirmDialog.qml` own the shell frame and peripheral UI surfaces
-
-## Current latency audit
-
-- at audit time there was no live Hydra GUI process to sample directly; the current shell characterization below comes from the rebuilt binary on an isolated real-app launch path
-- isolated `./build/debug/hydra --skip-boot` reached a screenshot/quit path in about `3.0s`, emitted `0` stdout lines, and emitted `0` stderr lines
-- the same isolated real-app instance averaged about `0.4%` CPU over a 5-second `pidstat` sample after boot
-- provider selector readiness is still gated by external CLI probes inside the async refresh snapshot:
-  - `codex --version` about `0.02s`
-  - `claude --version` about `0.07s`
-  - `hermes --version` about `0.25s`
-  - `opencode --version` about `0.43s`
-  - `gemini --version` about `0.88s`
-- those probes are cached for 10 seconds, but after cache expiry a full refresh still pays the probe cost again before the refreshed provider/session snapshot is applied
-- OpenCode launch is structurally the heaviest provider today:
-  - native `opencode` TUI reached its prompt/footer in about `1.76s`
-  - `opencode session list --format json -n 200` costs about `0.49s` per call on this machine
-  - Hydra calls the OpenCode resolver before launch to capture known session ids, then again after launch while pending resume metadata resolves, so OpenCode launch can easily spend about an extra second or more in resolver shells before the provider's own startup time is even counted
-- session/preview updates after launch, resume, terminate, or master/router launch still go through a full async `refresh()` path, and that path bundles provider probes, workspace load, session-state refresh, and timeline reload into one snapshot before the UI applies it; that is the main reason new terminals and preview cards can feel late even when the provider itself already started
-- embedded terminal attach itself is comparatively light:
-  - the QML viewport waits for visibility plus non-trivial width/height
-  - then Hydra runs `prepareInteractiveAttach()` and starts `tmux attach-session`
-  - the heavy part is usually the provider startup plus the surrounding refresh cycle, not tmux attach alone
-- there is still cleanup debt outside the GUI shell:
-  - several long-lived `hydra_router_control.py watch-report` helpers were still present from older routed tasks
-  - one old `hydra-shutdown-smoke-*` tmux/hermes process was also still present before manual cleanup
-  - those were effectively idle, but they are evidence that route/smoke helper cleanup is still not fully tight
-
-## Current latency hardening path
-
-- provider entries should render immediately from static adapter metadata instead of waiting on real probe shells
-- provider `--version` probes should refresh on a separate async lane and should no longer be part of the routine launch/resume/terminate refresh bundle
-- launch/resume/master/router/terminate actions should update the in-memory session snapshot immediately from the returned `SessionRecord` before scheduling the slower background refresh
-- the full background refresh remains the source of truth for:
-  - provider availability reconciliation
-  - workspace reload
-  - session-state reconciliation
-  - provider resume-token discovery
-  - timeline reload
-- terminal behavior is intentionally out of scope for the latency pass and should not be touched while validating launch responsiveness
 
 ## Constraints
 
